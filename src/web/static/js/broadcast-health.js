@@ -168,6 +168,27 @@
     setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);
   }
 
+  function showIngestToast(g) {
+    // Datamover / ingest stall (2026-10-29): a file in WIP is not moving. The fix is master
+    // control's restart runbook, so the toast carries it.
+    var t = document.createElement("div");
+    t.className = "bh-toast media";
+    var files = (g.stalls || []).map(function (x) { return x.code + " (" + x.step + ", " + Math.round(x.minutes) + " min)"; }).join(", ");
+    t.innerHTML =
+      '<div><b>⚠ Datamover stalled: ' + g.count + " file" + (g.count > 1 ? "s" : "") + " not moving</b>" +
+      "<small>" + esc(files) + (g.count > (g.stalls || []).length ? ", …" : "") +
+      " — on the Datamover close Datamover, Etere Ingest and Etere Active Sync, sign out and sign back in</small></div>";
+    var x = document.createElement("button");
+    x.className = "bh-toast-x";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss");
+    x.onclick = function (e) { e.stopPropagation(); e.preventDefault(); t.remove(); };
+    t.appendChild(x);
+    t.onclick = function () { window.open(MEDIA_URL + "#ingest", "_blank", "noopener"); };
+    toastWrap().appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);
+  }
+
   function showGhostToast(g) {
     var t = document.createElement("div");
     t.className = "bh-toast media";
@@ -192,7 +213,8 @@
     var media = (data && data.media && data.media.findings) || [];
     var ghosts = (data && data.media && data.media.ghosts) || { count: 0, titles: [] };
     var bindings = (data && data.media && data.media.bindings) || { count: 0, codes: [] };
-    var amber = media.length || ghosts.count || bindings.count;
+    var ingest = (data && data.ingest) || { count: 0, stalls: [] };
+    var amber = media.length || ghosts.count || bindings.count || ingest.count;
     if ((!data || data.state === "unknown" || data.unreachable) && !amber) {
       el.className = "bh-indicator unknown";
       el.querySelector(".bh-label").textContent = "Health unknown";
@@ -231,6 +253,7 @@
       el.className = "bh-indicator media";
       el.href = MEDIA_URL;
       var parts = [];
+      if (ingest.count) parts.push("Datamover stalled · " + ingest.count + " file" + (ingest.count > 1 ? "s" : ""));
       if (media.length) parts.push(media.length + " bad media file" + (media.length > 1 ? "s" : ""));
       if (ghosts.count) parts.push(ghosts.count + " ghost spot" + (ghosts.count > 1 ? "s" : ""));
       if (bindings.count) parts.push(bindings.count + " misbound row" + (bindings.count > 1 ? "s" : ""));
@@ -240,7 +263,9 @@
       });
       if (ghosts.count) tips.push("ghost spots: " + (ghosts.titles || []).map(function (x) { return x.title + " ×" + x.count; }).join(", "));
       if (bindings.count) tips.push("bound to a missing file (would air black): " + (bindings.codes || []).map(function (x) { return x.code + " ×" + x.count + (x.first ? " from " + x.first : ""); }).join(", "));
-      el.title = "Media check: " + tips.join("; ") + " — click for details";
+      if (ingest.count) tips.unshift("Datamover stalled, restart it (close Datamover, Etere Ingest, Etere Active Sync; sign out, sign in): " + (ingest.stalls || []).map(function (x) { return x.code + " at " + x.step + " " + Math.round(x.minutes) + " min"; }).join(", "));
+      el.title = (ingest.count ? "Ingest: " : "Media check: ") + tips.join("; ") + " — click for details";
+      if (ingest.count) el.href = MEDIA_URL + "#ingest";
       var seenM = alerted();
       var currentM = new Set();
       media.forEach(function (f) {
@@ -259,6 +284,12 @@
         var bkey = "bindings";
         currentM.add(bkey);
         if (!seenM.has(bkey)) { showBindingToast(bindings); seenM.add(bkey); }
+      }
+      if (ingest.count) {
+        // One toast per browser session per episode; re-alerts once the stall has cleared.
+        var ikey = "ingest";
+        currentM.add(ikey);
+        if (!seenM.has(ikey)) { showIngestToast(ingest); seenM.add(ikey); }
       }
       var prunedM = new Set();
       seenM.forEach(function (id) { if (currentM.has(id)) prunedM.add(id); });

@@ -1045,3 +1045,15 @@ to 5p. Separation 3/0/0 for this order. Production $3,000 → Production box.
 - [x] detection: ACoM non-SOS PDF → ACM (CBM keeps SOS); scan cache v22; service + bridge call `parse_acm`
 - [x] fixture tests/fixtures/acm/ + tests (parse, detection both ways, cutoff split, tamper); full unit suite; deploy
 - [x] dry run on the real PDF through gather + `--dry-run` entry; lesson + memory
+
+## Ingest-stall watchdog in Broadcast Health (Lee, 2026-10-29)
+Datamover (EtereMM9) crashes in the background; jobs for it sit in wf_job with no error anywhere
+(10/11, 10/12, 10/21 Korean News, 10/23, 10/28). Lee: alert via Control Room so MC restarts it.
+- [x] `business_logic/services/ingest_watchdog.py`: wf_job = open steps; ingest (class 12) non-Wait step > 20 min, restore (18-21/30) Datamover step > 45 min = stall; start_cnt >= 5 = looping, counted, never alarms. Thresholds from 5 days of wf_log (ingest steps < 1 min except the 10/28 crash; 06:00 restore burst queues up to 13 min)
+- [x] `scripts/check_ingest_stalls.py` (CLI, `--all`); live run: 6 open steps, all loopers, 0 stalls
+- [x] broadcast_health.py: 5-min loop, `ingest` in /status, `/api/broadcast-health/ingest` + `/rescan`; snapshot + `ingest_stall`/`ingest_clear` events
+- [x] header dot amber "Datamover stalled · N files", toast with the restart runbook, Media Check top section + "Check Datamover now", Health Events labels; js `?v=20261029`
+- [x] tests (10 watchdog + 1 events), full unit suite, TestClient smoke incl. simulated stall → events
+### Review
+Runbook text uses Lee's words (close Datamover, Etere Ingest, Etere Active Sync; sign out, sign in).
+Not done: cleaning the 6 looping instances (Lee's call), Etere ticket for a v36 MM9 build.

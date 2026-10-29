@@ -67,7 +67,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # in one middleware avoids editing ~58 per-page headers (there is no shared
     # base template) and automatically covers future pages. Non-HTML responses
     # (JSON, static assets, SSE streams) are passed through untouched.
-    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20261006"></script>'
+    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20261029"></script>'
     # Header button to the main portal next to every page's 🏠 (Kurt, 2026-10-28).
     _PORTAL_TAG = b'<script src="/static/js/portal-link.js?v=20261028b"></script>'
 

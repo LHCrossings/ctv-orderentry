@@ -132,3 +132,29 @@ def test_content_freeze_rides_on_the_offair_event():
     wdc = [e for e in ev if e["kind"] == "offair" and e["station"] == "WDC"][0]
     assert nyc["content"] is True and nyc["program"] == "NEWSTODAY100526" and nyc["part"] == 4
     assert "content" not in wdc and "program" not in wdc
+
+
+def test_ingest_stall_is_one_episode_with_the_files_it_opened_on():
+    """10/29: a dead Datamover piles files up behind it; the first detection logs the episode
+    (files, step, how long the oldest had waited), growth is not a new event, 0 is the clear."""
+    clean = _snap()
+    stuck = dict(
+        _snap(),
+        ingest={
+            "count": 1,
+            "codes": ["NEWSTODAY102226"],
+            "step": "Mediainfo on set File",
+            "worker": "Datamover (EtereMM9)",
+            "oldest": 23.5,
+            "since": "2026-10-21T19:37:42",
+        },
+    )
+    ev = diff_events(clean, stuck, AT)
+    assert _kinds(ev) == ["ingest_stall"]
+    assert ev[0]["codes"] == ["NEWSTODAY102226"] and ev[0]["worker"] == "Datamover (EtereMM9)"
+    more = dict(stuck, ingest=dict(stuck["ingest"], count=95, codes=["A", "B"]))
+    assert diff_events(stuck, more, AT) == [], "more files behind the same stall is not an event"
+    ev = diff_events(more, clean, AT)
+    assert _kinds(ev) == ["ingest_clear"] and ev[0]["count"] == 95
+    assert ev[0]["since"] == "2026-10-21T19:37:42"
+    assert _kinds(diff_events(None, stuck, AT)) == ["start", "ingest_stall"]

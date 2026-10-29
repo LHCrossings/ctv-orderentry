@@ -359,6 +359,79 @@ def _media_summary() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Ingest / Datamover stall watchdog (2026-10-29, Lee: "the Datamover keeps acting up, files
+# not uploaded to S3; the only sign is the crash popup when we close it"). Every few minutes:
+# any ingest step other than the Wait open > 20 min, or a restore download > 45 min, turns the
+# header amber with the restart runbook. Rules + anatomy: business_logic/services/ingest_watchdog.py
+# ---------------------------------------------------------------------------
+_INGEST_EVERY = 300  # seconds between checks (one cheap query over wf_job)
+_ingest: dict = {"data": None, "task": None}
+_ingest_lock = asyncio.Lock()
+
+
+def _run_ingest_scan() -> dict:
+    """Blocking scan; never raises (an unreachable DB must not break the header)."""
+    try:
+        from browser_automation.etere_direct_client import connect
+        from src.business_logic.services.ingest_watchdog import scan
+
+        with connect() as conn:
+            return scan(conn)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "state": "unknown",
+            "error": str(exc),
+            "checked_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "count": 0,
+            "stalls": [],
+            "looping": {"count": 0, "codes": []},
+        }
+
+
+async def _ingest_rescan() -> dict:
+    async with _ingest_lock:
+        _ingest["data"] = await asyncio.to_thread(_run_ingest_scan)
+    _record(_cache["data"])
+    return _ingest["data"]
+
+
+async def _ingest_loop() -> None:
+    while True:
+        await _ingest_rescan()
+        await asyncio.sleep(_INGEST_EVERY)
+
+
+def _ensure_ingest_task() -> None:
+    t = _ingest.get("task")
+    if t is None or t.done():
+        _ingest["task"] = asyncio.get_running_loop().create_task(_ingest_loop())
+
+
+def _ingest_summary() -> dict:
+    """Compact form for the header and the event snapshot."""
+    d = _ingest.get("data")
+    if not d:
+        return {"state": "unknown", "count": 0, "codes": [], "stalls": []}
+    stalls = d.get("stalls") or []
+    oldest = stalls[0] if stalls else None
+    return {
+        "state": d.get("state", "unknown"),
+        "checked_at": d.get("checked_at"),
+        "count": int(d.get("count") or 0),
+        "codes": [s["code"] or "?" for s in stalls[:6]],
+        "stalls": [
+            {"code": s["code"], "step": s["step"], "minutes": s["minutes"], "worker": s["worker"]}
+            for s in stalls[:6]
+        ],
+        "step": oldest["step"] if oldest else None,
+        "worker": oldest["worker"] if oldest else None,
+        "oldest": oldest["minutes"] if oldest else 0,
+        "since": oldest["since"] if oldest else None,
+        "looping": int((d.get("looping") or {}).get("count") or 0),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Event log — transitions of what the header dot shows (2026-09-09, Maija: "did it turn
 # yellow and we missed it?"). Only changes are written; a quiet day writes nothing.
 # data/ is gitignored and per host, so the Jumpbox keeps its own history.
@@ -393,6 +466,7 @@ def _snapshot(status: dict | None) -> dict:
         "media": _media_summary().get("findings", []),
         "ghosts": _media_summary().get("ghosts", {}).get("count", 0),
         "bindings": _media_summary().get("bindings", {}).get("count", 0),
+        "ingest": _ingest_summary(),
     }
 
 
@@ -414,9 +488,22 @@ def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
     @router.get("/api/broadcast-health/status")
     async def broadcast_health_status():
         _ensure_media_task()
+        _ensure_ingest_task()
         data = dict(await _get_status())
         data["media"] = _media_summary()
+        data["ingest"] = _ingest_summary()
         return JSONResponse(data)
+
+    @router.get("/api/broadcast-health/ingest")
+    async def broadcast_health_ingest():
+        _ensure_ingest_task()
+        d = _ingest.get("data") or {"state": "unknown", "count": 0, "stalls": []}
+        return JSONResponse({**d, "every_s": _INGEST_EVERY})
+
+    @router.post("/api/broadcast-health/ingest/rescan")
+    async def broadcast_health_ingest_rescan():
+        _ensure_ingest_task()
+        return JSONResponse({**(await _ingest_rescan()), "every_s": _INGEST_EVERY})
 
     @router.get("/api/broadcast-health/media")
     async def broadcast_health_media():

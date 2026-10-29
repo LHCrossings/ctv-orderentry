@@ -7,8 +7,9 @@ answered. `diff_events` turns two successive status snapshots into the transitio
 them; `EventLog` appends them as JSON lines and reads them back for the Health Events page.
 
 A snapshot is {"unreachable": bool, "offair": [{stationId, stationName, titles, since}],
-"media": [{id, code, kind, first}], "ghosts": <count>} — built by broadcast_health.py from
-the payload it already serves. Only transitions are logged, so a quiet day writes nothing.
+"media": [{id, code, kind, first}], "ghosts": <count>, "bindings": <count>,
+"ingest": {count, codes, step, worker, oldest, since}} — built by broadcast_health.py from the
+payload it already serves. Only transitions are logged, so a quiet day writes nothing.
 """
 
 from __future__ import annotations
@@ -32,7 +33,9 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
     Event kinds: start, feed_lost, feed_back, offair (content=True when the freeze is a
     still inside the program on air — program/part/offset name it), onair, media, media_clear,
     ghosts, ghosts_clear (ghost-spot count went from 0 to n / back to 0),
-    bindings, bindings_clear (rows bound to a missing playout file, same shape).
+    bindings, bindings_clear (rows bound to a missing playout file, same shape),
+    ingest_stall, ingest_clear (Datamover/ingest steps waiting past the threshold, 10/29:
+    one event per episode, with the files and the step it opened on).
     """
     at = at or now_iso()
     ev: list[dict] = []
@@ -102,6 +105,22 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
         add("bindings", count=c_bind)
     elif prev is not None and p_bind and not c_bind:
         add("bindings_clear", count=p_bind)
+    # Ingest / Datamover stalls (2026-10-29): condition-based like ghosts — the count grows
+    # as more files pile up behind a dead Datamover, which is one episode, not many events.
+    p_ing = (prev or {}).get("ingest") or {}
+    c_ing = cur.get("ingest") or {}
+    if int(c_ing.get("count") or 0) and not int(p_ing.get("count") or 0):
+        add(
+            "ingest_stall",
+            count=int(c_ing["count"]),
+            codes=list(c_ing.get("codes") or [])[:6],
+            step=c_ing.get("step"),
+            worker=c_ing.get("worker"),
+            oldest=c_ing.get("oldest"),
+            since=c_ing.get("since"),
+        )
+    elif prev is not None and int(p_ing.get("count") or 0) and not int(c_ing.get("count") or 0):
+        add("ingest_clear", count=int(p_ing["count"]), since=p_ing.get("since"))
     return ev
 
 

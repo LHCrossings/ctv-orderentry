@@ -20,7 +20,8 @@
         .he-pill.offair, .he-pill.feed_lost { background: var(--nord11); }
         .he-pill.content { background: var(--nord12); color: var(--nord0); }
         .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear, .he-pill.bindings_clear, .he-pill.ghosts_clear { background: var(--nord14); color: var(--nord0); }
-        .he-pill.media, .he-pill.ghosts, .he-pill.bindings { background: var(--nord13); color: var(--nord0); }
+        .he-pill.media, .he-pill.ghosts, .he-pill.bindings, .he-pill.ingest_stall { background: var(--nord13); color: var(--nord0); }
+        .he-pill.ingest_clear { background: var(--nord14); color: var(--nord0); }
         .he-pill.media_ack { background: var(--nord9); color: var(--nord0); }
         .he-pill.media_unack { background: var(--nord12); color: var(--nord0); }
         .he-pill.start { background: var(--nord3); }
@@ -60,7 +61,8 @@
         Every change of the on-air dot in the page header is recorded here: a station going off air (Stirlitz video
         freeze / black / no data) and coming back — a <b>content freeze</b> is a freeze whose on-air row is a program piece
         (a still picture inside the file, audio running: the 10/5 NEWSTODAY rights slate), shown orange instead of red — a bad media file or ghost spots found by the nightly <a href="/master-control/media-check">Media Check</a>
-        and cleared, the Stirlitz feed dropping out, and Control Room server restarts. Times are the server's clock
+        and cleared, a <b>Datamover stall</b> (an ingest or restore step waiting on the Datamover past its threshold, checked every five minutes; one event per episode, with the files it opened on) and its clearing,
+        the Stirlitz feed dropping out, and Control Room server restarts. Times are the server's clock
         (Pacific). Recording started 2026-09-09; the dot itself keeps no memory, so nothing before that exists.
     </p>
 </main>
@@ -70,7 +72,7 @@
     const body = document.getElementById('heBody');
     const status = document.getElementById('heStatus');
     const sel = document.getElementById('heDays');
-    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok', ghosts: 'ghost spots', ghosts_clear: 'ghosts ok', bindings: 'misbound files', bindings_clear: 'bindings ok', media_ack: 'media dismissed', media_unack: 'dismiss undone' };
+    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok', ghosts: 'ghost spots', ghosts_clear: 'ghosts ok', bindings: 'misbound files', bindings_clear: 'bindings ok', media_ack: 'media dismissed', media_unack: 'dismiss undone', ingest_stall: 'Datamover stalled', ingest_clear: 'Datamover ok' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
     function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -91,6 +93,8 @@
             case 'ghosts_clear': return 'Playlist clean again — ' + e.count + ' ghost spot' + (e.count === 1 ? '' : 's') + ' gone';
             case 'bindings': return '<b>' + e.count + '</b> playlist row' + (e.count === 1 ? '' : 's') + ' bound to a file the asset does not have (would air black)';
             case 'bindings_clear': return 'Bindings clean again — ' + e.count + ' row' + (e.count === 1 ? '' : 's') + ' rebound';
+            case 'ingest_stall': return '<b>' + e.count + '</b> file' + (e.count === 1 ? '' : 's') + ' not moving — ' + esc((e.codes || []).join(', ')) + (e.count > (e.codes || []).length ? ', …' : '') + ' waiting on <b>' + esc(e.worker || '?') + '</b> at "' + esc(e.step || '?') + '"' + (e.oldest ? ', oldest ' + Math.round(e.oldest) + ' min' : '') + ' — restart the Datamover (close Datamover, Etere Ingest, Etere Active Sync; sign out, sign in)';
+            case 'ingest_clear': return 'Ingest moving again — ' + e.count + ' file' + (e.count === 1 ? '' : 's') + ' released' + (e.since ? ' (stuck since ' + esc(String(e.since).replace('T', ' ')) + ')' : '');
             case 'feed_lost': return 'Stirlitz alarm feed unreachable' + (e.error ? ' — ' + esc(e.error) : '');
             case 'feed_back': return 'Stirlitz alarm feed back';
             case 'start': return 'Control Room server started (dot state reset)';

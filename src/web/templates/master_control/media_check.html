@@ -49,6 +49,12 @@
 </header>
 
 <main>
+    <div class="mc-bar" id="ingest">
+        <span id="inStatus">checking the Datamover…</span>
+        <span class="spacer"></span>
+        <button id="inRescan">Check Datamover now</button>
+    </div>
+    <div id="inBody"></div>
     <div class="mc-bar">
         <span id="mcStatus">loading…</span>
         <span class="spacer"></span>
@@ -74,6 +80,18 @@
         <code>scripts/check_ghost_spots.py</code> guidance: back up, delete the future playlist rows, never the aired ones.
         Past changes of the header dot are on <a href="/master-control/health-events">Health Events</a>.
     </p>
+    <p class="mc-note">
+        <b>Datamover stall check</b> (top of the page, every five minutes): a file dropped into WIP runs an Etere
+        "Initial Import" workflow — Search and set File, Mediainfo (Datamover), aspect/framerate checks, WIP → S3 upload
+        (Datamover), a one-hour Wait, FileDelete on WIP (Etere RC). Every step but the Wait takes seconds. When
+        EtereMM9 has crashed in the background (10/11, 10/12, 10/21 Korean News, 10/23, 10/28) the jobs sit and
+        nothing errors, so an ingest step open longer than 20 minutes, or a restore's S3 download longer than
+        45 minutes (the 06:00 restore burst queues them up to 13), alarms here and in the header. The fix is the
+        restart: on the Datamover close <b>Datamover</b>, <b>Etere Ingest</b> and <b>Etere Active Sync</b>, dismiss
+        the crash popup, sign out of the session and sign back in so all three start fresh — restarting MM9 alone did
+        not clear 10/23. Instances the SQL Agent has restarted five or more times are listed as looping and never
+        alarm; they want cleaning up.
+    </p>
 </main>
 
 <script>
@@ -83,6 +101,42 @@
     const btn = document.getElementById('mcRescan');
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    // Datamover / ingest stall watchdog (2026-10-29) — its own loop and endpoint, shown above the nightly scan.
+    const inBody = document.getElementById('inBody');
+    const inStatus = document.getElementById('inStatus');
+    const inBtn = document.getElementById('inRescan');
+    function renderIngest(d) {
+        if (!d || d.state === 'unknown') {
+            inStatus.textContent = 'Datamover check not available';
+            inBody.innerHTML = '<div class="mc-err"><b>Datamover check did not run.</b> ' + esc(d && d.error || 'No result yet — the first check starts with the first page load after a server restart.') + '</div>';
+            return;
+        }
+        var th = d.thresholds || { ingest_min: 20, restore_min: 45 };
+        inStatus.textContent = 'Datamover checked ' + esc(d.checked_at || '').replace('T', ' ') + ' · every ' + Math.round((d.every_s || 300) / 60) + ' min · ' + d.open_jobs + ' open step' + (d.open_jobs === 1 ? '' : 's');
+        var lp = d.looping || { count: 0, codes: [] };
+        var loopHtml = lp.count ? '<div class="detail" style="margin-top:6px">' + lp.count + ' workflow instance' + (lp.count === 1 ? '' : 's') + ' in the SQL Agent abort/restart loop (not alarming, wants cleanup): ' + esc(lp.codes.join(', ')) + '</div>' : '';
+        if (!d.count) {
+            inBody.innerHTML = '<div class="mc-ok"><b>Ingest is moving.</b> No ingest step open longer than ' + th.ingest_min + ' min, no restore download longer than ' + th.restore_min + ' min.' + loopHtml + '</div>';
+            return;
+        }
+        var rows = (d.stalls || []).map(function (s) {
+            return '<tr><td>' + Math.round(s.minutes) + ' min</td><td>' + esc(s.code || '?') + '</td><td>' + esc(s.workflow) + '</td><td>' + esc(s.step) + '</td><td>' + esc(s.worker) + '</td><td>' + esc(String(s.since || '').replace('T', ' ')) + '</td><td>' + esc(s.message || '') + '</td></tr>';
+        }).join('');
+        inBody.innerHTML = '<div class="mc-finding"><h3>Datamover stalled — ' + d.count + ' file' + (d.count > 1 ? 's' : '') + ' not moving <span class="kind">restart needed</span></h3>' +
+            '<div class="detail"><b>On the Datamover: close Datamover, Etere Ingest and Etere Active Sync, dismiss the crash popup, sign out of the session and sign back in.</b> Waiting on ' + esc((d.workers || []).join(', ')) + '. The oldest step has waited ' + Math.round(d.oldest_min) + ' min; the steps below should each take seconds.</div>' +
+            '<table><tr><th>Waiting</th><th>File</th><th>Workflow</th><th>Step</th><th>Runs in</th><th>Since</th><th>Message</th></tr>' + rows + '</table>' + loopHtml + '</div>';
+    }
+    function loadIngest() {
+        fetch('/api/broadcast-health/ingest').then(r => r.json()).then(renderIngest).catch(() => renderIngest(null));
+    }
+    inBtn.onclick = function () {
+        inBtn.disabled = true; inStatus.textContent = 'checking…';
+        fetch('/api/broadcast-health/ingest/rescan', { method: 'POST' }).then(r => r.json()).then(renderIngest)
+            .catch(() => renderIngest(null)).finally(() => { inBtn.disabled = false; });
+    };
+    loadIngest();
+    setInterval(loadIngest, 60000);
 
     function render(d) {
         if (!d || d.state === 'unknown') {
