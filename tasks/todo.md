@@ -1064,3 +1064,9 @@ Not done: cleaning the 6 looping instances (Lee's call), Etere ticket for a v36 
 - [x] applied: 1116885, 915478, 1012932, 1012933, 1116887, 1529711 → state 8; watchdog: 0 open steps, 0 looping
 ### Review
 MCIM032324VH still has two CIB3 copies ("Too many metafile selected") — the file stays on CIB3; HMONG-REPORT031625F/G and V-TOPNEWS071725C assets have no file anywhere and are expired.
+
+## Phantom colon-named file records (Lee, 2026-10-29)
+- [x] `scripts/delete_phantom_file_records.py` (list / --rehearse / --apply): FS_XFILEFILM + smptemetadata, then `fs_metafile_delete`; verify real copies, FS_METAFILE -N, no new workflow instance
+- [x] Lee rehearsed + applied from the Jumpbox: 45 removed, readback 0 orphan links / file rows; 6 "DO NOT USE" PI-LF records on CIB5 (no real file) left by design
+### Review
+Phantoms dated Jan-Feb 2025 (ids), re-stamped by Break Optimization's PI swap via the FILMATI trigger; nothing creates new ones.
