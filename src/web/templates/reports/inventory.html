@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory Report — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1240px; }
+        .tool-card { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 26px; box-shadow: 0 1px 4px var(--shadow-color); margin-bottom: 20px; }
+        .input-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; font-family: 'Inter', sans-serif; font-weight: 600; color: var(--text-primary); outline: none; }
+        .field-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+        .pill-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; align-items: center; }
+        .pill { padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 20px; cursor: pointer; user-select: none; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); transition: all 0.15s; }
+        .pill:hover { border-color: var(--nord10); color: var(--nord10); }
+        .pill.on { background: var(--nord10); border-color: var(--nord10); color: #fff; }
+        .pill.lang.on { background: var(--nord15); border-color: var(--nord15); }
+        .pill-link { font-size: 0.75rem; color: var(--nord10); cursor: pointer; margin-left: 6px; }
+        .run-btn { padding: 9px 20px; background: var(--nord10); color: #fff; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; height: 38px; white-space: nowrap; }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); }
+        .run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .run-btn.secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .loading-msg { color: var(--text-muted); font-size: 0.9rem; padding: 8px 0; }
+        .note { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+        .summary-bar { display: flex; gap: 24px; flex-wrap: wrap; padding: 12px 16px; border-radius: 10px; background: var(--bg-secondary); border: 1px solid var(--border-color); margin-bottom: 16px; }
+        .summary-bar .stat b { display: block; font-size: 1.3rem; color: var(--text-primary); }
+        .summary-bar .stat { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+        .mkt { margin-bottom: 26px; }
+        .mkt h2 { font-size: 1.05rem; margin: 0 0 8px; display: flex; align-items: baseline; gap: 12px; }
+        .mkt h2 small { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+        table.inv { width: 100%; border-collapse: collapse; font-size: 0.86rem; background: var(--nord6); }
+        table.inv th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); padding: 7px 10px; border-bottom: 2px solid var(--border-color); white-space: nowrap; }
+        table.inv td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        table.inv td.n, table.inv th.n { text-align: right; font-variant-numeric: tabular-nums; }
+        table.inv tr.lang-hdr td { background: var(--bg-secondary); font-weight: 700; color: var(--nord10); padding-top: 9px; }
+        table.inv tr.row { cursor: pointer; }
+        table.inv tr.row:hover td { background: rgba(94,129,172,0.06); }
+        table.inv td.open { font-weight: 700; }
+        table.inv td.open.low { color: var(--nord11); }
+        table.inv td.open.mid { color: var(--nord12); }
+        table.inv td.open.ok { color: var(--nord14); }
+        table.inv tr.detail td { background: var(--bg-secondary); padding: 6px 10px 10px 28px; }
+        table.daily { border-collapse: collapse; font-size: 0.78rem; }
+        table.daily th, table.daily td { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        table.daily th { color: var(--text-muted); font-weight: 600; }
+        table.daily td:first-child, table.daily th:first-child { text-align: left; }
+        .chev { display: inline-block; width: 1em; color: var(--text-muted); font-size: 0.75rem; }
+        @media print {
+            header, .tool-card, .no-print { display: none !important; }
+            main { max-width: none; }
+            body { background: #fff; color: #000; }
+            table.inv, table.daily { font-size: 10pt; background: #fff; }
+            table.inv td, table.inv th { border-color: #bbb; }
+            tr.detail { display: none; }
+            tr.detail.print-open { display: table-row; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>Inventory <span>Report</span></h1>
+                <div class="logo-sub">Reports · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="input-row" style="margin-bottom:14px;">
+            <div class="field-group"><label class="field-label">Date from</label><input id="dateFrom" type="date" class="field-input" /></div>
+            <div class="field-group"><label class="field-label">Date to</label><input id="dateTo" type="date" class="field-input" /></div>
+            <div class="field-group"><label class="field-label">Time from (optional)</label><input id="timeFrom" type="time" class="field-input" /></div>
+            <div class="field-group"><label class="field-label">Time to</label><input id="timeTo" type="time" class="field-input" /></div>
+            <button class="run-btn" id="runBtn">Run Report</button>
+            <button class="run-btn secondary" id="xlsBtn" disabled>Excel</button>
+            <button class="run-btn secondary" id="pdfBtn" disabled>Print / PDF</button>
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+            <div class="field-label">Markets <span class="pill-link" data-all="mkt">all</span><span class="pill-link" data-none="mkt">none</span></div>
+            <div class="pill-grid" id="mktPills">
+                {% for mid, code in markets.items() %}<span class="pill on" data-kind="mkt" data-id="{{ mid }}">{{ code }}</span>{% endfor %}
+            </div>
+        </div>
+        <div class="field-group">
+            <div class="field-label">Languages <span class="pill-link" data-none="lang">clear</span> <span class="note">(none selected = all)</span></div>
+            <div class="pill-grid" id="langPills">
+                {% for code, name in languages.items() %}<span class="pill lang" data-kind="lang" data-id="{{ code }}">{{ code }} · {{ name }}</span>{% endfor %}
+            </div>
+        </div>
+        <p class="note" style="margin-top:12px;">
+            Open time = the commercial break (COMS) seconds in each show not taken by a placed paid, bonus or added-value spot; PI, PSA and promo fillers count as open because they are bumped when a spot sells.
+            A break "has room" when at least 15 s is open — a show with four breaks never places five spots however much time is open. Times are the block's broadcast-day start; a time range keeps the shows that start inside it (post-midnight hours 00:00–05:59 belong to the day before).
+            Click a row for the day-by-day detail. Excel carries the same table plus one daily sheet per market; Print / PDF prints what is on screen.
+        </p>
+    </div>
+
+    <div id="results"><div class="loading-msg">Pick a date range and run the report.</div></div>
+</main>
+
+<script>
+(function () {
+    const $ = id => document.getElementById(id);
+    const results = $('results');
+    let lastQuery = null;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+    function pills(kind) { return Array.from(document.querySelectorAll('.pill[data-kind="' + kind + '"]')); }
+    document.querySelectorAll('.pill').forEach(p => p.addEventListener('click', () => p.classList.toggle('on')));
+    document.querySelectorAll('[data-all]').forEach(a => a.addEventListener('click', () => pills(a.dataset.all).forEach(p => p.classList.add('on'))));
+    document.querySelectorAll('[data-none]').forEach(a => a.addEventListener('click', () => pills(a.dataset.none).forEach(p => p.classList.remove('on'))));
+
+    function query() {
+        const df = $('dateFrom').value, dt = $('dateTo').value;
+        if (!df || !dt) { alert('Enter a date range.'); return null; }
+        const mk = pills('mkt').filter(p => p.classList.contains('on')).map(p => p.dataset.id);
+        if (!mk.length) { alert('Pick at least one market.'); return null; }
+        const lg = pills('lang').filter(p => p.classList.contains('on')).map(p => p.dataset.id);
+        return 'date_from=' + df + '&date_to=' + dt + '&markets=' + mk.join(',') + '&languages=' + encodeURIComponent(lg.join(','))
+            + '&time_from=' + encodeURIComponent($('timeFrom').value) + '&time_to=' + encodeURIComponent($('timeTo').value);
+    }
+
+    function openClass(openS, capS) {
+        if (!capS) return '';
+        const r = openS / capS;
+        return r < 0.15 ? 'low' : r < 0.4 ? 'mid' : 'ok';
+    }
+
+    function render(d) {
+        if (!d.markets.length) { results.innerHTML = '<div class="loading-msg">No published grid days match these filters.</div>'; return; }
+        let html = '<div class="summary-bar">'
+            + '<div class="stat">Open time<b>' + mmss(d.totals.open_s) + '</b></div>'
+            + '<div class="stat">Capacity<b>' + mmss(d.totals.cap_s) + '</b></div>'
+            + '<div class="stat">Sold<b>' + mmss(d.totals.sold_s) + '</b></div>'
+            + '<div class="stat">Breaks with room<b>' + d.totals.breaks_open + ' / ' + d.totals.breaks + '</b></div>'
+            + '<div class="stat">Days<b>' + d.dates.length + '</b></div>'
+            + (d.totals.unattributed_spots ? '<div class="stat">Spots outside the filters<b>' + d.totals.unattributed_spots + '</b></div>' : '')
+            + '</div>';
+        d.markets.forEach(m => {
+            html += '<div class="mkt"><h2>' + esc(m.market_code) + ' <small>open ' + mmss(m.open_s) + ' of ' + mmss(m.cap_s) + ' · breaks with room ' + m.breaks_open + ' / ' + m.breaks + '</small></h2>';
+            html += '<table class="inv"><thead><tr><th>Language</th><th>Program day/time</th><th>Title</th><th class="n">Breaks</th><th class="n">Airings</th><th class="n">Open</th><th class="n">Open / airing</th><th class="n">Breaks with room</th><th class="n">Sold</th><th class="n">Capacity</th></tr></thead><tbody>';
+            m.groups.forEach(g => {
+                html += '<tr class="lang-hdr"><td colspan="5">' + esc(g.lang_name) + '</td><td class="n">' + mmss(g.open_s) + '</td><td></td><td class="n">' + g.breaks_open + '</td><td colspan="2"></td></tr>';
+                g.rows.forEach(r => {
+                    const key = m.market + '|' + r.name + '|' + r.bstart;
+                    html += '<tr class="row" data-key="' + esc(key) + '"><td><span class="chev">▸</span>' + esc(r.lang_name) + '</td><td>' + esc(r.day_pattern + ' ' + r.time) + '</td><td>' + esc(r.title) + '</td>'
+                        + '<td class="n">' + esc(r.breaks_per_airing) + '</td><td class="n">' + r.airings + '</td>'
+                        + '<td class="n open ' + openClass(r.open_s, r.cap_s) + '">' + mmss(r.open_s) + '</td><td class="n">' + mmss(r.open_per_airing_s) + '</td>'
+                        + '<td class="n">' + r.breaks_open + ' / ' + r.breaks + '</td><td class="n">' + mmss(r.sold_s) + '</td><td class="n">' + mmss(r.cap_s) + '</td></tr>';
+                    let det = '<table class="daily"><tr><th>Day</th><th>Capacity</th><th>Sold</th><th>Open</th><th>Spots</th><th>Breaks with room</th></tr>';
+                    d.dates.forEach(day => {
+                        const x = r.days[day];
+                        if (!x) return;
+                        const dd = new Date(day + 'T12:00:00');
+                        det += '<tr><td>' + dd.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }) + '</td><td>' + mmss(x.cap_s) + '</td><td>' + mmss(x.sold_s) + '</td><td><b>' + mmss(x.open_s) + '</b></td><td>' + x.spots + '</td><td>' + x.breaks_open + ' / ' + x.breaks + '</td></tr>';
+                    });
+                    det += '</table>';
+                    html += '<tr class="detail" data-for="' + esc(key) + '" style="display:none"><td colspan="10">' + det + '</td></tr>';
+                });
+            });
+            html += '</tbody></table></div>';
+        });
+        results.innerHTML = html;
+        results.querySelectorAll('tr.row').forEach(tr => tr.addEventListener('click', () => {
+            const det = results.querySelector('tr.detail[data-for="' + CSS.escape(tr.dataset.key) + '"]');
+            const open = det.style.display === 'none';
+            det.style.display = open ? '' : 'none';
+            det.classList.toggle('print-open', open);
+            tr.querySelector('.chev').textContent = open ? '▾' : '▸';
+        }));
+    }
+
+    $('runBtn').onclick = async function () {
+        const q = query(); if (!q) return;
+        $('runBtn').disabled = true; $('xlsBtn').disabled = true; $('pdfBtn').disabled = true;
+        results.innerHTML = '<div class="loading-msg">Reading the grid and the placed spots…</div>';
+        try {
+            const r = await fetch('/api/reports/inventory?' + q);
+            if (!r.ok) { const t = await r.json().catch(() => ({})); results.innerHTML = '<div class="loading-msg">Error: ' + esc(t.detail || r.status) + '</div>'; return; }
+            render(await r.json());
+            lastQuery = q; $('xlsBtn').disabled = false; $('pdfBtn').disabled = false;
+        } catch (e) { results.innerHTML = '<div class="loading-msg">Error: ' + esc(e.message) + '</div>'; }
+        finally { $('runBtn').disabled = false; }
+    };
+    $('xlsBtn').onclick = () => { if (lastQuery) window.location = '/api/reports/inventory/excel?' + lastQuery; };
+    $('pdfBtn').onclick = () => window.print();
+
+    // default: next Monday through Sunday
+    const today = new Date();
+    const mon = new Date(today); mon.setDate(today.getDate() + ((8 - today.getDay()) % 7 || 7));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    $('dateFrom').value = mon.toISOString().slice(0, 10);
+    $('dateTo').value = sun.toISOString().slice(0, 10);
+})();
+</script>
+</body>
+</html>

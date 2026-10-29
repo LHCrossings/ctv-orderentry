@@ -434,6 +434,86 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
     async def reports_hub(request: Request):
         return templates.TemplateResponse(request, "reports.html")
 
+    # Inventory (avails) report — open COMS time + breaks with room per program (2026-10-29).
+    @router.get("/reports/inventory", response_class=HTMLResponse)
+    async def inventory_page(request: Request):
+        from business_logic.services.inventory_report import LANGUAGES, MARKETS
+
+        return templates.TemplateResponse(
+            request,
+            "reports/inventory.html",
+            {"markets": MARKETS, "languages": LANGUAGES},
+        )
+
+    def _inventory_args(date_from, date_to, markets, languages, time_from, time_to):
+        from business_logic.services.inventory_report import LANGUAGES, MARKETS
+
+        try:
+            d0, d1 = date.fromisoformat(date_from), date.fromisoformat(date_to)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "date_from and date_to must be YYYY-MM-DD")
+        if d1 < d0:
+            raise HTTPException(400, "date_to is before date_from")
+        if (d1 - d0).days > 92:
+            raise HTTPException(400, "at most 93 days at a time")
+        mids = [int(x) for x in (markets or "").split(",") if x.strip().isdigit()]
+        mids = [m for m in mids if m in MARKETS] or sorted(MARKETS)
+        langs = [x for x in (languages or "").split(",") if x in LANGUAGES]
+        tf = (time_from or "").strip() or None
+        tt = (time_to or "").strip() or None
+        return d0, d1, mids, langs, tf, tt
+
+    def _inventory_sync(d0, d1, mids, langs, tf, tt):
+        from browser_automation.etere_direct_client import connect
+        from business_logic.services.inventory_report import scan
+
+        with connect() as conn:
+            return scan(conn, d0, d1, mids, langs, tf, tt)
+
+    @router.get("/api/reports/inventory")
+    async def inventory_data(
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        markets: str = Query(""),
+        languages: str = Query(""),
+        time_from: str = Query(""),
+        time_to: str = Query(""),
+    ):
+        args = _inventory_args(date_from, date_to, markets, languages, time_from, time_to)
+        try:
+            rep = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: _inventory_sync(*args)
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return JSONResponse(rep)
+
+    @router.get("/api/reports/inventory/excel")
+    async def inventory_excel(
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        markets: str = Query(""),
+        languages: str = Query(""),
+        time_from: str = Query(""),
+        time_to: str = Query(""),
+    ):
+        from business_logic.services.inventory_report import build_excel
+
+        args = _inventory_args(date_from, date_to, markets, languages, time_from, time_to)
+        try:
+            rep = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: _inventory_sync(*args)
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        data = build_excel(rep)
+        filename = f"Inventory_{date_from}_{date_to}.xlsx"
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @router.get("/reports/placement-by-week", response_class=HTMLResponse)
     async def placement_by_week_page(request: Request):
         return templates.TemplateResponse(request, "reports/placement_by_week.html")

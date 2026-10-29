@@ -1070,3 +1070,21 @@ MCIM032324VH still has two CIB3 copies ("Too many metafile selected") — the fi
 - [x] Lee rehearsed + applied from the Jumpbox: 45 removed, readback 0 orphan links / file rows; 6 "DO NOT USE" PI-LF records on CIB5 (no real file) left by design
 ### Review
 Phantoms dated Jan-Feb 2025 (ids), re-stamped by Break Optimization's PI swap via the FILMATI trigger; nothing creates new ones.
+
+## Inventory Report (Maija → Charmaine; Lee, 2026-10-29)
+Avails: for a date range (+ optional broadcast time range), markets and languages as bubbles, show per
+program block how much COMS break time is still unsold and how many breaks still have room (5 spots
+into 4 breaks will not place). Maija's sheet shape (LANGUAGE | PROGRAM DAY/TIME | TITLE | BREAKS) plus
+the open time; day-by-day detail under each row; Excel export + print-to-PDF.
+- [x] `business_logic/services/inventory_report.py`: grid COMS segments per market/date (Traffic_Calendar
+      Level 0 → scheduleblock → block → segment visible COMS), sold = trafficPalinse-backed TPALINSE rows
+      (COM/COMS/BNS/AV, LIVELLO 0) attributed to the segment at tp.offset (fallback: nearest segment of the
+      block containing ORA); pure `build()` + `scan(conn, …)` + `build_excel()`
+- [x] route `/reports/inventory`, `/api/reports/inventory`, `/api/reports/inventory/excel`; hub card
+- [x] template with date/time fields, market + language bubbles (multi-select), summary table per market
+      grouped by language (day pattern, time, title, breaks, airings, open s, open/airing, breaks with room),
+      expandable daily cap/sold/open per date; print CSS for PDF
+- [x] tests on `build()` (attribution, open-break threshold 15 s, language/time filters, post-midnight, day pattern)
+- [x] live run 11/2-11/8: matches Maija's BREAKS column row for row (To the Point 4, Punjab Update 3, …); 10 markets in 3.6 s; deployed
+### Review
+Grid names each weekday's drama by title, so "Filipino Drama M-F 5p-6p" shows as per-title rows with day letters. Open = COMS seconds not taken by COM/COMS/BNS/AV; room = ≥15 s. Ordered-but-unplaced spots are not subtracted (future).
