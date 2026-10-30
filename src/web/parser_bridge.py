@@ -266,7 +266,9 @@ def find_language_window_issues(file_path, order_type: str) -> list[str]:
         if msg:
             ln_no = ln.get("line_number") or "?"
             issues.append(f"Line {ln_no} ({mkt} {lang}): {msg}")
-    return issues
+    # One line per sheet row per month (Harrah's) repeats a row's message six
+    # times under one line number — say it once.
+    return list(dict.fromkeys(issues))
 
 
 def _get(obj, *attrs, default=None):
@@ -1006,6 +1008,76 @@ def list_parsers() -> list[dict]:
     )
 
 
+def _normalize_harrahs(order, user_inputs: dict | None = None) -> dict:
+    """Harrah's Northern California: Charmaine's Monthly Estimate workbook has one
+    row per daypart with a MONTHLY spot count and no dates at all — the flight
+    (start Monday, number of months) is answered at the gather. The generic
+    normalizer stored one month's spots and money, so the first backwrite
+    (3231, 2026-10-30) reconciled $2,560 / 66 paid against Etere's $15,360 /
+    396. Walk the automation's own planner (`order_plan`, what the entry wrote)
+    so the IO detail is one dated line per row per broadcast month. The start
+    and month count come from the gathered answers when known (manifest
+    ``user_inputs[0]``), else the gather's defaults, and the preview says so."""
+    from browser_automation.harrahs_automation import DEFAULT_MARKET, default_start, order_plan
+    from browser_automation.line_planner import parse_date
+
+    base = _normalize_order(order)
+    ui = user_inputs if isinstance(user_inputs, dict) else {}
+    start = None
+    if ui.get("start_date_override"):
+        try:
+            start = parse_date(ui["start_date_override"])
+        except Exception:  # noqa: BLE001 - fall through to the default
+            start = None
+    assumed = start is None
+    start = start or default_start()
+    months = _int(ui.get("months")) or _int(getattr(order, "months", 0)) or 6
+    market = _str(getattr(order, "market_code", "")) or DEFAULT_MARKET
+    row_no = {id(ln): i + 1 for i, ln in enumerate(order.lines)}
+
+    lines = []
+    for p in order_plan(order, start, months):
+        ln = p["line"]
+        lines.append(
+            {
+                "description": p["description"],
+                "days": p["days"],
+                "time": _str(getattr(ln, "time", "")),
+                "duration": _str(getattr(ln, "duration", "")),
+                "weekly_spots": [],
+                "total_spots": _int(p["total_spots"]),
+                "rate": 0.0 if p["is_bonus"] else _float(getattr(ln, "rate", 0)),
+                "is_bonus": bool(p["is_bonus"]),
+                "market": market,
+                "language": _str(getattr(ln, "language", "")),
+                "start_date": p["date_from"].strftime("%m/%d/%Y"),
+                "end_date": p["date_to"].strftime("%m/%d/%Y"),
+                "line_number": row_no[id(ln)],
+            }
+        )
+    warnings = list(base.get("warnings") or [])
+    if assumed:
+        warnings.append(
+            f"The sheet carries no flight dates — shown from {start.month}/{start.day}/{start.year} "
+            f"for {months} month(s); the gather asks for the start date and month count."
+        )
+    base.update(
+        {
+            "markets": [market],
+            "flight_start": lines[0]["start_date"] if lines else "",
+            "flight_end": lines[-1]["end_date"] if lines else "",
+            "total_spots": sum(ln["total_spots"] for ln in lines),
+            "total_cost": round(
+                sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"]), 2
+            ),
+            "lines": lines,
+            "warnings": warnings,
+            "rates_are_net": True,
+        }
+    )
+    return base
+
+
 def _normalize_sagent(order) -> dict:
     """SAGENT normalizer: same as generic but injects per-line start/end dates
     from weekly spot distribution and week column dates."""
@@ -1060,13 +1132,17 @@ def _normalize_sagent(order) -> dict:
     return result
 
 
-def get_order_detail(file_path: Path, order_type: str) -> dict:
+def get_order_detail(file_path: Path, order_type: str, user_inputs: dict | None = None) -> dict:
     """
     Parse the given file and return a normalized detail dict.
 
     Args:
         file_path: Path to the order file
         order_type: OrderType.value string (e.g. "HYPHEN", "HL")
+        user_inputs: the gathered answers for this order when known (the
+            manifest's ``user_inputs[0]``) — an order whose flight is not on
+            the document (Harrah's) is dated from them, else from the gather's
+            own defaults
 
     Returns:
         dict with keys: client, estimate_number, description, markets,
@@ -1165,6 +1241,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_net_weekly(raw, agency="IW Group")
     elif order_type == "SAGENT":
         result = _normalize_sagent(raw)
+    elif order_type == "HARRAHS":
+        result = _normalize_harrahs(raw, user_inputs)
     else:
         result = _normalize_order(raw)
     result["lines"] = _apply_ros_overrides(result["lines"])

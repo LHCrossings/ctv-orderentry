@@ -73,6 +73,20 @@ def _io_detail_is_blank(detail) -> bool:
     )
 
 
+def _io_detail_is_undated(detail) -> bool:
+    """True when the detail has lines but not one flight date anywhere — the
+    signature of an order whose flight is not on the document (Harrah's: a
+    monthly estimate dated only at the gather). The bridge dates it from the
+    manifest's gathered answers now; a manifest written before that holds one
+    undated month, so re-derive."""
+    lines = (detail or {}).get("lines") or []
+    if not lines:
+        return False
+    if (detail or {}).get("flight_start") or (detail or {}).get("flight_end"):
+        return False
+    return not any(ln.get("start_date") or ln.get("end_date") for ln in lines)
+
+
 def _refresh_manifest_io_detail(m: dict, mf: Path, entered_dir: Path):
     """Re-parse the manifest's IO through the current bridge and write the
     result back into the manifest. Returns the new detail, or None when the
@@ -82,7 +96,12 @@ def _refresh_manifest_io_detail(m: dict, mf: Path, entered_dir: Path):
     io_path = entered_dir / (m.get("io_filename") or mf.name[: -len(".manifest.json")])
     if not io_path.exists():
         return None
-    detail = _parse_io_detail(io_path, str(m.get("order_type") or ""))
+    gathered = (m.get("user_inputs") or [None])[0]
+    detail = _parse_io_detail(
+        io_path,
+        str(m.get("order_type") or ""),
+        user_inputs=gathered if isinstance(gathered, dict) else None,
+    )
     if detail.get("error") or _io_detail_is_blank(detail):
         return None
     m["io_detail"] = detail
@@ -4005,7 +4024,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # against a $7.5k run sheet). Re-derive from the IO still sitting
             # in Entered/ and persist it, so the retry uses the fixed bridge
             # without re-entering the order.
-            if _io_detail_is_blank(io_detail):
+            if _io_detail_is_blank(io_detail) or _io_detail_is_undated(io_detail):
                 refreshed = _refresh_manifest_io_detail(m, mf, entered_dir)
                 if refreshed is not None:
                     io_detail = _io_detail_for_contract(m, idx)

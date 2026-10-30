@@ -153,3 +153,9 @@ def test_sweep_catches_the_imprenta_shape():
     """Self-test: the sweep's predicate rejects the exact field set that broke."""
     names = {f.name for f in dataclasses.fields(_Line)}
     assert not (names & RATE_NAMES) and not (names & SPOT_NAMES)
+
+
+def test_harrahs_routes_to_the_dedicated_normalizer():
+    """A monthly estimate with no dates on the sheet is dated from the gathered
+    answers (contract 3231, 2026-10-30) — the generic normalizer stored one month."""
+    assert "HARRAHS" in _dedicated_keys()

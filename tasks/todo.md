@@ -1107,4 +1107,5 @@ the AI vision fallback both misread the grid. Transcribed by eye, reconciles exa
 - [x] register: enums, detection (client text + filename), orchestrator, processing service,
       parser_bridge, scan cache v23; handler-kwargs + bridge-field tests
 - [x] dry run 10/30: 54 lines / 708 spots / $15,360 net, CENTROMEDIA 316, rolled back; 0 rows left
-- [ ] Lee enters live (CLI or drag-drop; answers 11/2/2026, 6 months, 25/0/0)
+- [x] Lee enters live (CLI or drag-drop; answers 11/2/2026, 6 months, 25/0/0) — contract 3231 entered 10/30: 54 lines / 708 spots / $15,360, all placed
+- [x] One-click backwrite popup (SC $2,560 / 66 paid vs Etere $15,360 / 396): the generic bridge normalizer stored ONE undated month → `_normalize_harrahs` walks `order_plan` with the manifest's gathered start/months; undated manifests re-derive on retry. Lee backwrote 3231 on the legacy page meanwhile.

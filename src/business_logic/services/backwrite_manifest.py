@@ -57,7 +57,7 @@ def _jsonable(obj):
     return str(obj)
 
 
-def _parse_io_detail(io_path: Path, order_type_value: str) -> dict:
+def _parse_io_detail(io_path: Path, order_type_value: str, user_inputs: dict | None = None) -> dict:
     """Normalized IO detail via the same parser bridge the web UI uses.
 
     Returns {"error": ...} instead of raising — the manifest still gets written
@@ -66,7 +66,7 @@ def _parse_io_detail(io_path: Path, order_type_value: str) -> dict:
     try:
         from web.parser_bridge import get_order_detail
 
-        return get_order_detail(io_path, str(order_type_value))
+        return get_order_detail(io_path, str(order_type_value), user_inputs=user_inputs)
     except Exception as exc:  # noqa: BLE001 - manifest must not break entry
         return {"error": f"IO detail parse failed: {exc}"}
 
@@ -83,7 +83,9 @@ def write_backwrite_manifest(orders: list, result) -> Path | None:
 
     io_path = Path(orders[0].pdf_path)
     otype = getattr(result.order_type, "value", str(result.order_type))
-    detail = _parse_io_detail(io_path, otype)
+    # The gathered answers date an order whose flight is not on the document.
+    gathered = orders[0].order_input if isinstance(orders[0].order_input, dict) else None
+    detail = _parse_io_detail(io_path, otype, user_inputs=gathered)
     # Some parsers swallow errors and return an empty order instead of raising
     # (e.g. WorldLink) — an IO with no lines at all is a failed parse too.
     parse_failed = bool(detail.get("error")) or not (

@@ -240,3 +240,78 @@ def test_missing_time_window_refuses(rows):
     mutated[i][j] = "M-F"
     with pytest.raises(HarrahsParseError, match="no day pattern / time window"):
         parse_harrahs_rows(mutated)
+
+
+# ── Parser bridge: the backwrite's view of the workbook ───────────────────────
+# Contract 3231 (2026-10-30): the generic normalizer stored ONE month (66 paid
+# spots, $2,560) and the one-click backwrite reconciled it against Etere's six
+# (396, $15,360). The bridge walks `order_plan` with the gathered answers now.
+
+
+def _bridge():
+    from web.parser_bridge import get_order_detail
+
+    return get_order_detail
+
+
+def test_bridge_detail_is_the_entered_plan_when_the_gather_answers_are_known():
+    d = _bridge()(
+        Path(XLSX), "HARRAHS", user_inputs={"start_date_override": "11/02/2026", "months": 6}
+    )
+    assert len(d["lines"]) == 54
+    assert d["total_spots"] == 708 and d["total_cost"] == 15360.0
+    assert (d["flight_start"], d["flight_end"]) == ("11/02/2026", "04/25/2027")
+    paid = sum(ln["total_spots"] for ln in d["lines"] if not ln["is_bonus"] and ln["rate"] > 0)
+    assert paid == 396
+    assert d["markets"] == ["CVC"] and d["rates_are_net"] is True
+    first, last = d["lines"][0], d["lines"][-1]
+    assert first["description"] == "M-F 7p-9p Chinese News/Talk"
+    assert (first["start_date"], first["end_date"], first["rate"]) == (
+        "11/02/2026",
+        "11/29/2026",
+        46.0,
+    )
+    assert (last["description"], last["start_date"], last["end_date"]) == (
+        "BNS Filipino ROS",
+        "03/29/2027",
+        "04/25/2027",
+    )
+    assert last["rate"] == 0.0 and last["is_bonus"]
+    # Line numbers are the SHEET row, shared by a row's six months.
+    assert sorted({ln["line_number"] for ln in d["lines"]}) == list(range(1, 10))
+
+
+def test_bridge_detail_without_answers_uses_the_gather_defaults_and_says_so():
+    d = _bridge()(Path(XLSX), "HARRAHS")
+    start = default_start()
+    assert len(d["lines"]) == 54  # the sheet's own "6 months contract"
+    assert d["flight_start"] == start.strftime("%m/%d/%Y")
+    assert any("no flight dates" in w for w in d["warnings"])
+
+
+def test_bridge_detail_honours_a_different_start_and_month_count():
+    d = _bridge()(
+        Path(XLSX), "HARRAHS", user_inputs={"start_date_override": "12/28/2026", "months": 2}
+    )
+    assert len(d["lines"]) == 18
+    assert (d["flight_start"], d["flight_end"]) == ("12/28/2026", "02/28/2027")
+    assert d["total_cost"] == 5120.0
+
+
+def test_manifest_detail_with_no_dates_anywhere_is_re_derived():
+    """A manifest written by the generic normalizer (one undated month) must be
+    refreshed from the IO, the way a $0 detail is."""
+    from web.routes.orders import _io_detail_is_blank, _io_detail_is_undated
+
+    undated = {
+        "flight_start": "",
+        "flight_end": "",
+        "lines": [{"rate": 46.0, "total_spots": 25, "start_date": "", "end_date": ""}],
+    }
+    assert _io_detail_is_undated(undated) and not _io_detail_is_blank(undated)
+    dated = _bridge()(
+        Path(XLSX), "HARRAHS", user_inputs={"start_date_override": "11/02/2026", "months": 6}
+    )
+    assert not _io_detail_is_undated(dated)
+    assert not _io_detail_is_undated({"flight_start": "11/02/2026", "lines": [{"rate": 1}]})
+    assert not _io_detail_is_undated({"lines": []})
