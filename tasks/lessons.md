@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## An Order Whose Flight Is Not on the Document Normalizes to ONE Month in the Bridge — the Gathered Answers Must Reach the Backwrite's View of the IO, and the One-Click Backwrite Is Rehearsed Before the Parser Ships
+
+**Session:** Lee, Harrah's Northern California 3231 — "can you see why maybe it isn't back writing" (2026-10-30)
+
+**Rule:** Charmaine's Monthly Estimate sheet carries a MONTHLY spot count per row and no dates;
+the start Monday and month count are answered at the gather. The entry walked `order_plan`
+(54 lines, 708 spots, $15,360) and was right. The backwrite manifest's `io_detail` came from
+the generic `_normalize_order`, which read each row once: 66 paid spots, $2,560, no flight
+dates. The one-click reconcile then compared that one month against Etere's six and held the
+order in Awaiting. The 10/20 Imprenta sweep test could not see it: the line class HAS `rate`
+and `total_spots`, they just mean "per month". The answers that date the order were already
+in the manifest (`user_inputs[0]`: `start_date_override`, `months`); nothing handed them to
+the bridge. I rehearsed the dry run and the detection, never the manifest → reconcile step.
+
+**How to apply:**
+1. When a parser's flight (dates, month count, start) is a GATHER answer rather than a document
+   field, the bridge normalizer takes the gathered dict (`get_order_detail(..., user_inputs=)`)
+   and walks the automation's own planner, so the IO detail is exactly what entry wrote. The
+   manifest writer passes `orders[0].order_input`; the refresh path passes the manifest's
+   `user_inputs[0]`; the preview (no answers) uses the gather's defaults and SAYS so in a
+   warning.
+2. A line whose count is "per month" / "per week" with no dates is a per-month shape, not a
+   total: a detail with lines but no date anywhere (`_io_detail_is_undated`) is re-derived on
+   retry, the way a $0 detail is.
+3. Rehearsal for a new parser includes the backwrite: `get_order_detail` on the fixture with the
+   gathered answers must match the dry run's line count, paid spots and money
+   (`test_bridge_detail_is_the_entered_plan_when_the_gather_answers_are_known`), before the
+   first live entry, not after the AE's popup.
+4. The legacy `/backwrite` page reconciles Etere against itself (no IO detail), so it "validates
+   fine" on the same order; that is a weaker check, not a contradiction.
+
 ## One Regex Spanning Four Labelled Fields Breaks When the Agency Adds a Fifth — Match Each Label on Its Own; and a Grid That Fit on One Page Will Not Always (third appearance of "read every page")
 
 **Session:** Lee, IW Group / Covered California OE Action 35569/35581/35588 — "I need to find out why these three parsers are not working" (2026-10-28)
