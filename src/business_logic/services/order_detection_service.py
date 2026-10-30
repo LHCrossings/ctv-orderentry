@@ -180,6 +180,11 @@ class OrderDetectionService:
         if self._is_viewpoint(first_page_text):
             return OrderType.VIEWPOINT
 
+        # Harrah's Northern California — house Monthly Estimate proposal, client-keyed
+        # (Harrah's Resort Southern California is a different customer and must not match)
+        if self._is_harrahs(first_page_text):
+            return OrderType.HARRAHS
+
         # Snoqualmie Casino & Hotel — house "Crossings TV Media Proposal", client-keyed;
         # must precede the Charmaine-template fallback
         if self._is_snoqualmie(first_page_text):
@@ -359,6 +364,12 @@ class OrderDetectionService:
         from browser_automation.parsers.iwcca_parser import is_iwcca_text
 
         return is_iwcca_text(text)
+
+    def _is_harrahs(self, text: str) -> bool:
+        """Harrah's NORTHERN California on a Crossings TV Media Proposal."""
+        from browser_automation.parsers.harrahs_parser import is_harrahs_text
+
+        return is_harrahs_text(text)
 
     def _is_snoqualmie(self, text: str) -> bool:
         """Snoqualmie Casino proposal: the client's name on a 'Crossings TV Media Proposal' page."""
@@ -1138,6 +1149,10 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.VIDA
     if "SNOQUALMIE" in name_upper:
         return OrderType.SNOQUALMIE
+    # Harrah's Northern California — Charmaine names the workbook after the client;
+    # the SoCal resort (a different customer, via an agency) must not route here.
+    if "HARRAH" in name_upper and "SOUTHERN" not in name_upper and "SOCAL" not in name_upper:
+        return OrderType.HARRAHS
     if "VIEWPOINT" in name_upper:
         return OrderType.VIEWPOINT
     if "ILLINOIS LOTTERY" in " ".join(name_upper.split()) or "ILLOTTERY" in name_upper:

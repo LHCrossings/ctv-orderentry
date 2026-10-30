@@ -160,6 +160,7 @@ class OrderProcessingService:
         OrderType.VIDA: "_process_vida_order",
         OrderType.SNOQUALMIE: "_process_snoqualmie_order",
         OrderType.VIEWPOINT: "_process_viewpoint_order",
+        OrderType.HARRAHS: "_process_harrahs_order",
         OrderType.CAFOB: "_process_cafob_order",
         OrderType.CBM: "_process_cbm_order",
         OrderType.GAUGER: "_process_gauger_order",
@@ -217,6 +218,7 @@ class OrderProcessingService:
         OrderType.VIDA,
         OrderType.SNOQUALMIE,
         OrderType.VIEWPOINT,
+        OrderType.HARRAHS,
         OrderType.CAFOB,
         OrderType.CBM,
         OrderType.GAUGER,
@@ -3648,6 +3650,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.VIEWPOINT,
+                error_message=error_detail,
+            )
+
+    def _process_harrahs_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Harrah's Northern California house proposal — one direct contract."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.harrahs_automation import run_harrahs_order
+            from browser_automation.parsers.harrahs_parser import parse_harrahs
+
+            parsed = parse_harrahs(str(order.pdf_path))
+            results = run_harrahs_order(parsed, inp)  # list of (code, success)
+
+            contracts = [
+                Contract(contract_number=code, order_type=OrderType.HARRAHS)
+                for code, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HARRAHS,
+                    error_message="Harrah's processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.HARRAHS)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"Harrah's processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Harrah's processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.HARRAHS,
                 error_message=error_detail,
             )
 

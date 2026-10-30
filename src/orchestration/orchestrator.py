@@ -178,6 +178,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_viewpoint_inputs",
         "Viewpoint Ads",
     ),
+    OrderType.HARRAHS: (
+        "browser_automation.harrahs_automation",
+        "gather_harrahs_inputs",
+        "Harrah's Northern California",
+    ),
     OrderType.SJCOUNTY: (
         "browser_automation.sjcounty_automation",
         "gather_sjcounty_inputs",

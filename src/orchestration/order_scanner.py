@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 22  # v22: ACM reads Charmaine's ACoM proposal PDF for any non-SOS client (Asian Law Caucus); v21: California Black Media SOS proposal + IO (text + CBM/SOS filename); v20: Viewpoint xlsx content rule; v19: Viewpoint Ads political option sheet (agency text + VIEWPOINT filename); v18: Snoqualmie Casino house proposal (client text + filename); v17: The Vida Agency / Puget Sound Energy proposal (agency text + filename); v16: San Mateo County Voters house Media Campaign (client text + filename); v15: CA Alliance of Family Owned Businesses PAC (client text + filename); v14: Illinois Lottery house proposal (advertiser text + filename); v13: Gauger Broadcast Order (text + GAUGER filename); v12: HPSJ house proposal (client text + HPSJ filename); v11: IWCCA queue client/agency labels; v10: IW Group / Covered California TELEVISION ORDER (text + CCA_ filename); v9: Admerasia detects any Ref:/Order Number IO (SMG); v8: San Joaquin County xlsx/filename rule; v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
+_SCAN_CACHE_VERSION = 23  # v23: Harrah's Northern California Monthly Estimate xlsx (client text/cell + HARRAH filename); v22: ACM reads Charmaine's ACoM proposal PDF for any non-SOS client (Asian Law Caucus); v21: California Black Media SOS proposal + IO (text + CBM/SOS filename); v20: Viewpoint xlsx content rule; v19: Viewpoint Ads political option sheet (agency text + VIEWPOINT filename); v18: Snoqualmie Casino house proposal (client text + filename); v17: The Vida Agency / Puget Sound Energy proposal (agency text + filename); v16: San Mateo County Voters house Media Campaign (client text + filename); v15: CA Alliance of Family Owned Businesses PAC (client text + filename); v14: Illinois Lottery house proposal (advertiser text + filename); v13: Gauger Broadcast Order (text + GAUGER filename); v12: HPSJ house proposal (client text + HPSJ filename); v11: IWCCA queue client/agency labels; v10: IW Group / Covered California TELEVISION ORDER (text + CCA_ filename); v9: Admerasia detects any Ref:/Order Number IO (SMG); v8: San Joaquin County xlsx/filename rule; v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -82,6 +82,10 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "VIEWPOINT" in v:
                     wb.close()
                     return OrderType.VIEWPOINT
+                # Harrah's Northern California — the Client cell (sheet spells "Northen").
+                if "HARRAH" in v and ("NORTHERN" in v or "NORTHEN" in v):
+                    wb.close()
+                    return OrderType.HARRAHS
                 if "SIERRA DONOR" in v:
                     wb.close()
                     return OrderType.SIERRADONOR

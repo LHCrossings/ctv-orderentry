@@ -68,6 +68,7 @@ class OrderType(Enum):
     VIDA = "vida"  # The Vida Agency / Puget Sound Energy — house proposal PDF, NET, agency 260 @ 0%, SEA
     SNOQUALMIE = "snoqualmie"  # Snoqualmie Casino & Hotel — house proposal PDF, PROMO rates, direct 417 @ 0%, SEA
     VIEWPOINT = "viewpoint"  # Viewpoint Ads — Charmaine's political option sheet, GROSS, agency 486 @ 15%, SFO
+    HARRAHS = "harrahs"  # Harrah's Northern California — house Monthly Estimate xlsx, PROMO rates, direct 485 @ 0%, CVC
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
@@ -171,6 +172,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "ntooitive",
     "the vida agency",
     "snoqualmie",
+    "harrah's northern california",
     "viewpoint ads",
     "time advertising",
     "3olivesmedia",

@@ -1088,3 +1088,23 @@ the open time; day-by-day detail under each row; Excel export + print-to-PDF.
 - [x] live run 11/2-11/8: matches Maija's BREAKS column row for row (To the Point 4, Punjab Update 3, …); 10 markets in 3.6 s; deployed
 ### Review
 Grid names each weekday's drama by title, so "Filipino Drama M-F 5p-6p" shows as per-title rows with day letters. Open = COMS seconds not taken by COM/COMS/BNS/AV; room = ≥15 s. Ordered-but-unplaced spots are not subtracted (future).
+
+## Harrah's Northern California parser (2026-10-30) — BUILT 10/30, live entry is Lee's
+
+Facts: no Harrah's parser exists (grep, all branches). ANAGRAF 485 "Harrah's Northern
+California" (direct, AGENZIA 0, 0%, CENTROMEDIA 316 Broadcast, payment 2) has no contract yet.
+Precedent 833 `QR8 Harrahs 2306` (SoCal 2023): one line per row per BROADCAST MONTH, Rotation,
+customer separation 30 min. The signed PDF is a scanned image (no text layer); tesseract and
+the AI vision fallback both misread the grid. Transcribed by eye, reconciles exactly.
+
+- [x] Get Charmaine's original proposal (xlsx or PDF export) → fixture `tests/fixtures/harrahs/`
+- [x] `browser_automation/parsers/harrahs_parser.py` — Snoqualmie reader shape (NET + PROMO),
+      Monthly column instead of week columns; reconcile row NET = Promo×Monthly, Total Paid /
+      Total Bonuses footers, Σ Total Value, Discount rate
+- [x] `browser_automation/harrahs_automation.py` — POP-style month planner: one line per row per
+      broadcast month over the asked flight (11/2/26 → 4/25/27 = Nov..Apr), Rotation,
+      spots_per_week=0; bonus rows code 10 $0; Hmong Sa-Su 6p-8p bonus keeps its daypart
+- [x] register: enums, detection (client text + filename), orchestrator, processing service,
+      parser_bridge, scan cache v23; handler-kwargs + bridge-field tests
+- [x] dry run 10/30: 54 lines / 708 spots / $15,360 net, CENTROMEDIA 316, rolled back; 0 rows left
+- [ ] Lee enters live (CLI or drag-drop; answers 11/2/2026, 6 months, 25/0/0)
