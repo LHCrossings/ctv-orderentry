@@ -30,6 +30,39 @@ proved the money and the per-week totals; neither check can see an unplaceable l
 
 ---
 
+## A "Reapply" That Writes ONE Column of a Seven-Column Assignment Leaves a Row That Says Two Things — Every Creative Writer Goes Through One Full-Row Function, and a Two-Day Scan Shows Only the First Slice
+
+**Session:** Lee, Broadcast Health "6 playlist rows bound to a missing file" after the WorldLink room (2026-10-31)
+
+**Rule:** The WorldLink room's restore step lets Etere re-place the blacklisted spots (COMS, no
+creative, no binding), then "reapply filmati" ran `UPDATE TPALINSE SET ID_FILMATI = …` alone on
+the new rows. A row that carries a creative is seven columns (COD_PROGRA, TITLE, ID_FILMATI,
+NEWTYPE, SUPPORTO, ASPECT, DURATION_P — what the traffic assign route writes), so 78 CVC rows
+for 11/2-11/29 said "creative 146733" and at the same time COMS, `(Line 27) M-Su 7p-11p`, no
+duration, EMPTY SUPPORTO: the CIB would FINDCLIP forever and the slot airs black. The six
+COTE15E02 rows in the same batch were fine only because Etere had picked the copy from the
+line's pool itself. The scan's `--days 2` window showed six of the 78; the rest would have
+surfaced one day at a time. Same family as 10/9 ("a copy diff is SELECT * minus the fields you
+intend to change") and 9/14 ("a guard applied to one path is not applied").
+
+**How to apply:**
+1. One writer: `tpalinse_assign.assign_creative(cur, tp_id, filmati_id)` — code and title
+   from FILMATI, NEWTYPE from the line's booking code, SUPPORTO from `playout_binding.binding`,
+   aspect/duration from the copy the binding rule picks; writes nothing when the asset has no
+   sized copy. `tests/unit/test_tpalinse_assign_full_row.py` pins its column set to the assign
+   route's and refuses any `UPDATE TPALINSE SET ID_FILMATI = … WHERE` in orders.py.
+2. When a scan flags N rows, ask what the same signature counts over the WHOLE future, not
+   the scan window (`RTRIM(SUPPORTO) = '' AND ID_FILMATI > 0 AND NEWTYPE = 'COMS'`): 6 → 78.
+3. A one-second LASTUPDATE batch across many dates is a tool's write, not the scheduler's;
+   ask the operator which tool before reading code (Lee named the room in one line).
+4. Repair = `scripts/repair_worldlink_room_half_rows.py` (dry run / --apply): full assignment
+   per row, in-txn verify (signature gone, scan predicate empty, each asset equals a bound
+   sibling column for column except NEWTYPE), restore .sql in logs/, fresh-connection
+   readback. From KL every statement is ~0.4 s RTT, so 78 rows take ~3 minutes — a "hang"
+   under a 100 s timeout was the network (8/27 lesson, again).
+
+---
+
 ## An Order Whose Flight Is Not on the Document Normalizes to ONE Month in the Bridge — the Gathered Answers Must Reach the Backwrite's View of the IO, and the One-Click Backwrite Is Rehearsed Before the Parser Ships
 
 **Session:** Lee, Harrah's Northern California 3231 — "can you see why maybe it isn't back writing" (2026-10-30)

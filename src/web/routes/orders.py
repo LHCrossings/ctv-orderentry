@@ -3067,6 +3067,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def worldlink_room_reapply_filmati(body: dict = Body(...)):
         """Find new TPALINSE rows created after restore and apply stored filmati."""
         from browser_automation.etere_direct_client import connect as _edc
+        from business_logic.services.tpalinse_assign import assign_creative
 
         filmati = body.get("filmati", {})  # {line_id: {filmati_id, snapshot_max}}
         if not filmati:
@@ -3094,12 +3095,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 new_rows = [r[0] for r in cur.fetchall()]
                 if new_rows:
+                    # The FULL assignment (code, title, NEWTYPE, binding, aspect, duration),
+                    # never ID_FILMATI alone: 2026-10-30 the one-column update left 78 CVC
+                    # rows reading COMS with an empty SUPPORTO — "would air black".
                     for tpa_id in new_rows:
-                        cur.execute(
-                            "UPDATE TPALINSE SET ID_FILMATI = %s WHERE ID_TPALINSE = %s",
-                            (filmati_id, tpa_id),
-                        )
-                        applied += 1
+                        if assign_creative(cur, tpa_id, filmati_id):
+                            applied += 1
+                        else:
+                            pending += 1  # asset has no sized copy yet; the nightly scan re-checks
                     conn.commit()
                 else:
                     pending += 1  # Etere hasn't scheduled this line yet
