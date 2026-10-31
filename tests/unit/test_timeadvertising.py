@@ -100,3 +100,30 @@ def test_ros_line_still_defaults_to_full_day():
     ros = "M-Sun: ROS Free spots"
     assert _line_times(ros) == ("06:00", "23:59")
     assert _line_description(ros) == "ROS Free spots"
+
+
+def test_gross_total_with_space_inside_the_number():
+    """Nov 2026 export: '$ 1 ,380.00' — a space before the thousands comma. The
+    old regex stopped at the '1' and refused a correct $1,380 order as '$1.00'."""
+    from browser_automation.parsers.timeadvertising_parser import _reconcile_gross_total
+
+    class _Ln:
+        def __init__(self, rate, total_spots):
+            self.rate, self.total_spots = rate, total_spots
+
+    lines = [_Ln(60.0, 23)]
+    _reconcile_gross_total(lines, "GROSS TOTAL: $ 1 ,380.00\nNET TOTAL: $ 1 ,173.00", "x.pdf")
+    _reconcile_gross_total(lines, "GROSS TOTAL: $ 1, 380.00", "x.pdf")
+    with pytest.raises(ValueError, match=r"GROSS TOTAL says \$1,173\.00"):
+        _reconcile_gross_total(lines, "GROSS TOTAL: $ 1 ,173.00\nNET TOTAL: $ 9.00", "x.pdf")
+
+
+@pytest.mark.parametrize(
+    "name, market, gross",
+    [("graton_nov2026_cvc.pdf", "CVC", 1380.0), ("graton_nov2026_sfo.pdf", "SFO", 4140.0)],
+)
+def test_nov2026_spaced_gross_total_parses(ta_parser, name, market, gross):
+    order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / name))
+    assert order.market == market
+    assert sum(ln.total_spots for ln in order.lines) == 34
+    assert sum(ln.rate * ln.total_spots for ln in order.lines) == gross
