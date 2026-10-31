@@ -127,3 +127,67 @@ def test_nov2026_spaced_gross_total_parses(ta_parser, name, market, gross):
     assert order.market == market
     assert sum(ln.total_spots for ln in order.lines) == 34
     assert sum(ln.rate * ln.total_spots for ln in order.lines) == gross
+
+
+def _plan(order):
+    return [
+        (sp["days"], sp["start_date"], sp["end_date"], sp["total_spots"], sp["per_day_max"])
+        for ln in order.lines
+        for sp in ln.get_etere_lines()
+    ]
+
+
+def test_nov2026_thu_1x_fri_2x_splits_into_per_count_lines(ta_parser):
+    """IO week 1 of the Cantonese row is Thu 1 + Fri 2 (weeks 2-4 add Wed 1).
+    One line 'RF, 3 spots, max 1/day' can never place (3232/3233, Lee 10/31):
+    days are split by per-day count, Friday carries max 2."""
+    order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / "graton_nov2026_cvc.pdf"))
+    cant = order.lines[0]
+    assert [w.day_spots for w in cant.weeks] == [
+        {"R": 1, "F": 2},
+        {"W": 1, "R": 1, "F": 2},
+        {"W": 1, "R": 1, "F": 2},
+        {"W": 1, "R": 1, "F": 2},
+    ]
+    assert [
+        (sp["days"], sp["start_date"], sp["end_date"], sp["total_spots"], sp["per_day_max"])
+        for sp in cant.get_etere_lines()
+    ] == [
+        ("R", "11/02/2026", "11/05/2026", 1, 1),
+        ("F", "11/02/2026", "11/27/2026", 8, 2),
+        ("WR", "11/09/2026", "11/26/2026", 6, 1),
+    ]
+    # Mandarin (Thu 1 + Fri 1 every week) stays ONE line.
+    assert _plan(order)[3:4] == [("RF", "11/02/2026", "11/27/2026", 8, 1)]
+
+
+@pytest.mark.parametrize("name", ["graton_sep2026_cvc.pdf", "graton_nov2026_sfo.pdf"])
+def test_every_block_is_placeable_and_holds_every_ordered_spot(ta_parser, name):
+    """Invariant: a block's spots == per-day max × its days × its weeks, and
+    the blocks of a row sum to the row's ordered spots."""
+    from datetime import datetime, timedelta
+
+    order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / name))
+    for ln in order.lines:
+        specs = ln.get_etere_lines()
+        assert sum(sp["total_spots"] for sp in specs) == ln.total_spots
+        for sp in specs:
+            d0 = datetime.strptime(sp["start_date"], "%m/%d/%Y")
+            d1 = datetime.strptime(sp["end_date"], "%m/%d/%Y")
+            weeks = (d1 - d0 + timedelta(days=6)).days // 7 + (0 if (d1 - d0).days % 7 < 6 else 0)
+            slots = sp["per_day_max"] * len(sp["days"]) * max(weeks, 1)
+            assert sp["total_spots"] <= slots, (name, ln.program, sp)
+
+
+def test_sep2026_plans_unchanged_by_the_per_count_split(ta_parser):
+    """All-ones grids (every September row) consolidate exactly as before."""
+    order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / "graton_sep2026_cvc.pdf"))
+    assert _plan(order) == [
+        ("WRF", "08/31/2026", "09/18/2026", 9, 1),
+        ("TWR", "09/21/2026", "09/24/2026", 3, 1),
+        ("RF", "08/31/2026", "09/18/2026", 6, 1),
+        ("WR", "09/21/2026", "09/24/2026", 2, 1),
+        ("RF", "08/31/2026", "09/18/2026", 6, 1),
+        ("F", "09/21/2026", "09/25/2026", 1, 1),
+        ("MTW", "09/28/2026", "09/30/2026", 3, 1),
+    ]

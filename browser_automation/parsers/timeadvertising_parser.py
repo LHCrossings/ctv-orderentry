@@ -129,83 +129,96 @@ class TimeAdvertisingLine:
         """
         Convert weekly day-spot data to Etere line specifications.
 
-        Groups consecutive weeks with identical day patterns into single blocks.
-        Weeks with different day patterns become separate Etere lines.
+        A week's days are first split by their PER-DAY count ({R: 1, F: 2} →
+        ("R", 1/day) + ("F", 2/day)), then consecutive weeks carrying the same
+        (days, per-day count) are consolidated into one block. One Etere line
+        can hold only one max-per-day, so Thu 1x + Fri 2x written as one
+        "RF, 3 spots, max 1/day" line can never place (Graton 3232/3233, Lee
+        2026-10-31) — it has to be two lines.
 
         Etere entry style (like Admerasia):
           - spots_per_week = 0   (no weekly cap — exact scheduling)
-          - max_daily_run  = 1   (1 spot per day per line)
-          - total_spots    = total across block date range
+          - max_daily_run  = the per-day count of the block
+          - total_spots    = per-day count × days × weeks in the block
           - days           = day code string e.g. "RF", "T", "WR"
 
         Returns:
             List of dicts: start_date, end_date, days, total_spots,
                            per_day_max, spots_per_week, rate
         """
-        etere_lines = []
+        _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
+        today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
         n = len(self.weeks)
-        i = 0
+        starts = [datetime.strptime(w.week_start, "%m/%d/%Y") for w in self.weeks]
 
-        while i < n:
-            wk = self.weeks[i]
-            if wk.total_spots == 0:
-                i += 1
-                continue
+        # Per week: {(days_str, per_day): True} — the sub-patterns of that week.
+        def _groups(wk: "TimeAdvertisingWeek") -> dict:
+            by_count: dict = {}
+            for d, k in wk.day_spots.items():
+                if k > 0:
+                    by_count.setdefault(k, []).append(d)
+            return {
+                ("".join(d for d in DAY_ORDER if d in days), k): True
+                for k, days in by_count.items()
+            }
 
-            pattern = wk.days_str
-            block_total = wk.total_spots
-            block_week_start = datetime.strptime(wk.week_start, "%m/%d/%Y")
-            last_week_start = block_week_start
+        week_groups = [_groups(w) for w in self.weeks]
+        consumed: set = set()  # (week_index, key) already placed in a block
+        etere_lines = []
 
-            # If the week began in the past, advance start_date to the first
-            # actual spot day so Etere's scheduler won't reject the line.
-            today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-            effective_start = block_week_start
-            if block_week_start < today_dt and wk.day_spots:
-                _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
-                first_day = min(wk.day_spots, key=lambda d: _day_offset.get(d, 0))
-                trimmed = block_week_start + timedelta(days=_day_offset.get(first_day, 0))
-                if trimmed >= today_dt:
-                    effective_start = trimmed
-                    print(
-                        f"[TA] Week of {wk.week_start} is in the past — trimming start to {trimmed.strftime('%m/%d/%Y')}"
-                    )
+        for i in range(n):
+            # Walk this week's sub-patterns in day order (Mon-first), so the
+            # output is stable and reads like the IO.
+            for key in sorted(week_groups[i], key=lambda kk: (_day_offset[kk[0][0]], kk[1])):
+                if (i, key) in consumed:
+                    continue
+                pattern, per_day = key
 
-            # Extend block while consecutive weeks have the same day pattern
-            j = i + 1
-            while j < n:
-                next_wk = self.weeks[j]
-                next_start = datetime.strptime(next_wk.week_start, "%m/%d/%Y")
-                gap = (
-                    next_start - datetime.strptime(self.weeks[j - 1].week_start, "%m/%d/%Y")
-                ).days
+                # Extend the block while the next consecutive week carries the
+                # same (days, per-day) sub-pattern.
+                j = i
+                while (
+                    j + 1 < n
+                    and (starts[j + 1] - starts[j]).days == 7
+                    and key in week_groups[j + 1]
+                ):
+                    j += 1
+                for w in range(i, j + 1):
+                    consumed.add((w, key))
 
-                if next_wk.days_str != pattern or gap != 7:
-                    break
+                # If the first week began in the past, advance start_date to
+                # the block's first spot day so Etere's scheduler won't reject it.
+                effective_start = starts[i]
+                if starts[i] < today_dt:
+                    trimmed = starts[i] + timedelta(days=_day_offset[pattern[0]])
+                    if trimmed >= today_dt:
+                        effective_start = trimmed
+                        print(
+                            f"[TA] Week of {self.weeks[i].week_start} is in the past — "
+                            f"trimming start to {trimmed.strftime('%m/%d/%Y')}"
+                        )
 
-                block_total += next_wk.total_spots
-                last_week_start = next_start
-                j += 1
+                # Block end = last spot day of the last week (not always Sunday)
+                block_end = starts[j] + timedelta(days=_day_offset[pattern[-1]])
+                weeks_in_block = j - i + 1
+                etere_lines.append(
+                    {
+                        "days": pattern,
+                        "start_date": effective_start.strftime("%m/%d/%Y"),
+                        "end_date": block_end.strftime("%m/%d/%Y"),
+                        "total_spots": per_day * len(pattern) * weeks_in_block,
+                        "per_day_max": per_day,
+                        "spots_per_week": 0,
+                        "rate": self.rate,
+                    }
+                )
 
-            # Block end = last spot day in the last week (not always Sunday)
-            _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
-            last_spot_offset = max(_day_offset.get(d, 0) for d in pattern)
-            block_end = last_week_start + timedelta(days=last_spot_offset)
-
-            etere_lines.append(
-                {
-                    "days": pattern,
-                    "start_date": effective_start.strftime("%m/%d/%Y"),
-                    "end_date": block_end.strftime("%m/%d/%Y"),
-                    "total_spots": block_total,
-                    "per_day_max": 1,
-                    "spots_per_week": 0,
-                    "rate": self.rate,
-                }
-            )
-
-            i = j
-
+        # Every ordered spot is in exactly one block.
+        assert sum(sp["total_spots"] for sp in etere_lines) == self.total_spots, (
+            f"[TIMEADVERTISING] line blocks hold "
+            f"{sum(sp['total_spots'] for sp in etere_lines)} spots, "
+            f"the IO row has {self.total_spots} ({self.program})"
+        )
         return etere_lines
 
 
