@@ -91,6 +91,29 @@ before it reaches the `.ts`), and the remux falls back to re-encoding the AAC wi
 decoder errors ignored (verified on a deliberately spliced sample: `aac copy`
 fails, the re-encode keeps the full duration with sound across the join).
 
+**A reconnect also tears the VIDEO, and the torn join poisons decoders (10/30).**
+`Phoenix_20261030_0800.mp4` (reconnect at 08:12) played in VLC but showed random
+black flashes in EDIUS from the join to the end of the file (Maija/Jake 10/30).
+The `.ts` carried, in order: the last field before the drop cut off at slice 11 of
+28, two P-fields of the NEW session that reference pictures not in the file (the
+new session joined mid-GOP), then its first IDR. The remux is a stream copy, so
+the mp4 has the same three bad fields with squashed timestamps (three fields in
+531 ticks). ffmpeg's own decoder with frame threads flagged every third frame
+"corrupt decoded frame" for the remaining 47 minutes (28,299 frames); with one
+thread only the join itself errors, so the stream after the IDR is clean and the
+damage is decoder state poisoned by the join. EDIUS evidently does the same.
+Rule since 10/30: a relay exit closes the segment (`Mark-CutTail` + a fresh
+recorder, which drops everything up to the first keyframe), so the reconnected
+stream opens a NEW file named for its own start minute (`Phoenix_20261030_0812`)
+on a clean IDR, and `Remux-Closed` trims the cut segment to its last keyframe
+(`Last-KeyframeSeconds`, `-to`; ffmpeg compares DTS in output time). One
+reconnect = one extra file for that hour; never a join inside a file. Keeping the
+`.ts` as a "backup" would not help: it holds the same bytes.
+Hand repair of an already-recorded hour: cut the mp4 at the first IDR after the
+join with `-noaccurate_seek -ss <a little after the IDR dts>` (a plain `-ss` lands
+on the keyframe BEFORE the join and keeps the junk as discard-flagged pre-roll),
+and the pre-join part with `-to <dts of the last complete field>`.
+
 Local retention: 72 hours (three days, Lee 10/15 and again 10/16; the NAS keeps five), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
 

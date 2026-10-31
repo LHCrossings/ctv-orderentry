@@ -3260,3 +3260,37 @@ PowerShell reserves, so three tests ran with an empty argument list and printed 
    any other automatic variable; a wrong name here fails silently with "0 s" runs.
 4. The grab could only be tested once the tap existed; stage the service early, but the
    first REAL frame is the acceptance test. Look at the picture.
+
+## A Stream Copy Carries the Source's Torn Join Into Every Container — and a Decoder Poisoned at a Join Fails for the REST of the File, So Compare Decoders by Thread Count, Not by Eye
+
+**Session:** Maija/Jake via Lee, Phoenix_20261030_0800 "random black flashes in EDIUS from the middle to the end, VLC fine, HandBrake fixes it" (2026-10-30)
+
+**Rule:** The hour had one Phoenix reconnect (08:12). The recorder kept writing the same .ts across
+it, so the file carried a field cut off at slice 11 of 28, two P-fields of the NEW session that
+reference pictures not in the file, then the first IDR; the remux (`-c copy`) wrote the same three
+fields into the mp4 with their timestamps squashed. ffmpeg's decoder with frame threads then
+reported "corrupt decoded frame" on every THIRD frame for the remaining 47 minutes (28,299 lines);
+with `-threads 1` the only errors were at the join. The post-join stream is clean; the damage is
+decoder STATE poisoned by the join, carried by whichever thread/context decoded the junk — which is
+exactly what an editor's decoder showing black "from the middle onward" looks like. VLC conceals,
+HandBrake decodes with libav error concealment and writes new frames, so both "fix" it. Lee's
+proposed .ts backup would hold the same bytes. Established by: packet timeline (one +1/+1/+530
+anomaly), odd field count, SPS/PPS identical, slice-header walk at the join, full decode with
+per-frame timestamps, then the 1-vs-6-thread control.
+
+**How to apply:**
+1. A reconnect/restart never lands INSIDE a file: close the segment on relay exit, let a fresh
+   recorder open the next file on its first keyframe (copy mode drops leading non-keyframes), and
+   trim the cut segment to its last keyframe at remux (`Mark-CutTail`, `Last-KeyframeSeconds`,
+   `-to`; `tests/unit/test_video02_recorder_reconnect_split.py`). One reconnect = one extra file.
+2. "Plays fine in VLC" is not "the stream is fine": run a full decode with `showinfo` so every
+   error has a timestamp, and when errors are periodic, rerun the window with `-threads 1`; a
+   count that drops to the join alone is a poisoned-state signature, not stream damage.
+3. `-ss` on an mp4 lands on the keyframe BEFORE the target when reordering is in play and keeps
+   the skipped samples as discard-flagged pre-roll (still decoded by every player); verify the
+   first packet's SIZE/flags against the packet list, and use `-noaccurate_seek -ss <a bit later>`
+   to start exactly on the intended IDR. `-to`/`-t` on a stream copy compare DTS, not PTS.
+4. The ffmpeg CLI's `trace_headers` at `-loglevel trace` on a 2 GB mp4 runs for 20+ minutes
+   because the mov demuxer logs its whole index; cut a few seconds to annexb and parse the slice
+   headers (first_mb, frame_num, field/bottom, idr_pic_id, poc) yourself — 28 slices per field,
+   a truncated field shows as fewer.

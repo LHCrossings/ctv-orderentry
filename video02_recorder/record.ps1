@@ -42,6 +42,13 @@ $Prefix     = "Phoenix"
 
 New-Item -ItemType Directory -Force -Path $RecDir, $LogDir | Out-Null
 $script:RemuxRetryAt = @{}   # segment name -> next remux attempt after an all-modes failure
+# Segment name -> $true when the segment did NOT close at a clock hour: the relay died (Phoenix
+# reconnect, ~10 a day) or the recorder was restarted, so its last field is cut off mid-slice.
+# Remux-Closed trims such a segment to its last keyframe. 10/30 0800: the reconnect at 08:12
+# left a field with 11 of 28 slices, then two P-fields of the NEW session that reference pictures
+# not in the file, then the first IDR; ffmpeg's decoder flagged every third frame "corrupt" for
+# the remaining 47 minutes and EDIUS showed black flashes from there to the end (Maija 10/30).
+$script:CutTail = @{}
 
 function Log($msg) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $msg
@@ -90,6 +97,28 @@ function Current-Segment {
     Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" -File | Sort-Object Name -Descending | Select-Object -First 1
 }
 
+function Mark-CutTail($why) {
+    # The live segment is about to end somewhere other than a clock hour: remember to trim it.
+    $cur = Current-Segment
+    if ($cur) { $script:CutTail[$cur.Name] = $true; Log "segment $($cur.Name) ends by $why; its tail will be trimmed to the last keyframe" }
+}
+
+function Last-KeyframeSeconds($tsPath) {
+    # OUTPUT-time position (seconds) of the last video keyframe in the segment, read from its
+    # final 8 s only. ffmpeg shifts input timestamps so the output starts at 0 (no -copyts), and
+    # -to compares against those shifted times, so the input start_time is subtracted here.
+    $fmt = & $FFprobe -v error -show_entries format=start_time,duration -of csv=p=0 $tsPath
+    if (-not $fmt) { return $null }
+    $parts = ($fmt -split ','); $start = 0.0; $dur = 0.0
+    if ($parts.Count -ge 2) { [double]::TryParse($parts[0], [ref]$start) | Out-Null; [double]::TryParse($parts[1], [ref]$dur) | Out-Null } else { return $null }
+    if ($dur -le 0) { return $null }
+    $from = [Math]::Max(0, $start + $dur - 8)
+    $rows = & $FFprobe -v error -read_intervals "$from%" -select_streams v:0 -show_entries packet=dts_time,flags -of csv=p=0 $tsPath
+    $last = $rows | Where-Object { $_ -match ',K' } | Select-Object -Last 1
+    if (-not $last) { return $null }
+    return [double](($last -split ',')[0]) - $start
+}
+
 function Remux-Closed($recProc) {
     # A segment is closed when the muxer has opened a NEWER one, or the recorder is not
     # running. Never by elapsed time: on 10/15 every relay reconnect (16:36, 17:35, 20:34)
@@ -115,6 +144,15 @@ function Remux-Closed($recProc) {
         # it is digital silence end to end (-91 dB measured 10/17 on three hours and the live
         # stream), which is why the 10/15 "ac3 copy" fallback produced Maija's silent hours.
         $tc = $ts.CreationTime.ToString("HH:mm:ss") + ";00"
+        # A segment that ended by a reconnect/restart is cut mid-field: end the mp4 just before
+        # its last keyframe so every GOP in it is complete (loses < 0.5 s at a point where the
+        # stream itself was down for 5-60 s). Hour-boundary segments end at a keyframe already.
+        $trim = @()
+        if ($script:CutTail.ContainsKey($ts.Name)) {
+            $k = Last-KeyframeSeconds $ts.FullName
+            if ($k -ne $null -and $k -gt 1) { $trim = @("-to", ("{0:F3}" -f ($k - 0.001))); Log ("{0}: tail trimmed to {1:F3} s (last keyframe; segment ended by a reconnect/restart)" -f $ts.Name, $k) }
+            else { Log "$($ts.Name): no keyframe found in the last 8 s; tail NOT trimmed" }
+        }
         $streams = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n"
         $aac = $streams | Where-Object { $_ -match ',aac' } | Select-Object -First 1
         $enc = @("-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2")
@@ -128,7 +166,7 @@ function Remux-Closed($recProc) {
         }
         $ok = $false
         foreach ($m in $modes) {
-            $ffArgs = @("-hide_banner", "-loglevel", "error", "-nostdin") + $m.pre + @("-i", $ts.FullName, "-map", "0:v:0") + $m.args + @("-c:v", "copy", "-timecode", $tc, "-movflags", "+faststart", "-f", "mp4", "-y", $tmp)
+            $ffArgs = @("-hide_banner", "-loglevel", "error", "-nostdin") + $m.pre + @("-i", $ts.FullName, "-map", "0:v:0") + $m.args + @("-c:v", "copy", "-timecode", $tc, "-movflags", "+faststart") + $trim + @("-f", "mp4", "-y", $tmp)
             # Start-Process, never `&` + 2>&1: ffmpeg's stderr warnings would become PowerShell errors (thumb.ps1 lesson 10/16).
             $errFile = "$LogDir\remux_last_stderr.txt"
             $proc = Start-Process -FilePath $FFmpeg -ArgumentList $ffArgs -NoNewWindow -PassThru -Wait -RedirectStandardError $errFile
@@ -140,6 +178,7 @@ function Remux-Closed($recProc) {
                 try { Remove-Item $ts.FullName -Force -ErrorAction Stop }
                 catch { Log "could not delete $($ts.Name) after remux: $($_.Exception.Message)" }
                 $script:RemuxRetryAt.Remove($ts.Name)
+                $script:CutTail.Remove($ts.Name)
                 Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label)
                 $ok = $true; break
             }
@@ -190,6 +229,7 @@ function Write-Status($relayProc, $recProc) {
 }
 
 Log "loop starting (keep ${KeepHours}h, min free ${MinFreeGB} GB, relay=$RelayTarget)"
+Mark-CutTail "a recorder restart (the segment that was live when the task last stopped)"
 $recProc = Start-Recorder      # listener first, so the relay's first datagrams land
 Start-Sleep -Seconds 2
 $relayProc = Start-Relay
@@ -197,7 +237,7 @@ $lastSize = -1; $stall = 0
 while ($true) {
     Start-Sleep -Seconds $LoopSleep
     try {
-        if ($recProc.HasExited)   { Log "recorder exited code=$($recProc.ExitCode); restarting"; $recProc = Start-Recorder; $lastSize = -1; $stall = 0 }
+        if ($recProc.HasExited)   { Log "recorder exited code=$($recProc.ExitCode); restarting"; Mark-CutTail "a recorder exit"; $recProc = Start-Recorder; $lastSize = -1; $stall = 0 }
         if ($relayProc.HasExited) {
             # Phoenix's SRT session breaks a few times a day (10/15: 11:54, 11:59, 16:35, 16:37,
             # 17:34, 20:34; the stream's own clock jumps forward minutes at each, i.e. a restart
@@ -205,6 +245,15 @@ while ($true) {
             # caller and can still hold our dead session for a minute, so the first reconnect
             # may be refused: retry every 5 s instead of once per loop.
             Log "relay exited code=$($relayProc.ExitCode); reconnecting"
+            # Close the segment here and start a NEW one for the reconnected stream (named for its
+            # own start minute, e.g. Phoenix_20261030_0812). A fresh recorder drops everything up
+            # to the first keyframe, so the new file opens on a clean IDR and never carries the
+            # torn field + orphan P-fields of a mid-GOP join; the old file's cut tail is trimmed
+            # at remux. One reconnect = one extra file for that hour, never a bad join inside one.
+            Mark-CutTail "a relay exit (Phoenix reconnect)"
+            Stop-Proc $recProc
+            $recProc = Start-Recorder
+            Start-Sleep -Seconds 2
             for ($try = 1; $try -le 6; $try++) {
                 Start-Sleep -Seconds 5
                 $relayProc = Start-Relay
@@ -221,6 +270,7 @@ while ($true) {
         $lastSize = $size
         if ($stall -ge 3) {
             Log "no bytes written for $($stall * $LoopSleep) s; restarting relay pid=$($relayProc.Id) and recorder pid=$($recProc.Id)"
+            Mark-CutTail "a stall restart"
             Stop-Proc $relayProc; Stop-Proc $recProc; Start-Sleep -Seconds 5
             $recProc = Start-Recorder; Start-Sleep -Seconds 2; $relayProc = Start-Relay; $lastSize = -1; $stall = 0
         }
