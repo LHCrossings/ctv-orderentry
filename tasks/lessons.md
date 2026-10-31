@@ -4,6 +4,32 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Day-Grid Cell Is a COUNT, Not a Mark — a Line Builder Keyed on the SET of Marked Days Hard-Codes 1/Day, and "Th 1x + Fri 2x" Becomes a Line That Can Never Place
+
+**Session:** Lee, Graton 3232/3233 — "The first line has 1x on thursday and 2x on Friday. This was written as one line of 3 airings with a max of 1 per day. This never will place." (2026-10-31)
+
+**Rule:** The Time Advertising parser read the M-T-W-T-F-S-S grid by x position and kept the
+per-day counts, then `get_etere_lines` grouped weeks by `days_str` (the set of marked days) with
+`per_day_max = 1` hard-coded. Every Graton IO before November carried only 1s, so the shape was
+never exercised; the first `2` (Friday) produced 'RF, 3 spots, max 1/day' and 'WRF, 12 spots,
+max 1/day' — 2 and 9 slots for 3 and 12 spots. The same morning's GROSS TOTAL fix had already
+proved the money and the per-week totals; neither check can see an unplaceable line.
+
+**How to apply:**
+1. A line is `(days, per-day count)`: split each week's cells by their count, consolidate
+   consecutive weeks on that pair, and set `max_daily_run` to the count. Assert per block
+   `spots == count × |days| × weeks` and per row `Σ blocks == ordered spots`
+   (`test_every_block_is_placeable_and_holds_every_ordered_spot`).
+2. A fixture set whose cells are all 1 cannot pin a count rule; the November PDFs are the
+   fixture for the 2, and an all-ones snapshot test pins that the split is a no-op there.
+3. A dry run / gather summary that prints `N spots max K/day over D days × W weeks` lets the
+   operator see `N > K·D·W` before entry; the gather printed spots and dates but not the cap.
+4. Repair = Lee deletes the two wrong lines in the Etere app, then
+   `scripts/reline_graton_2611_cantonese.py --apply` adds the three lines onto the existing
+   headers (sibling separation/rowstatus copied, in-txn readback, 15 spots / row total asserted).
+
+---
+
 ## An Order Whose Flight Is Not on the Document Normalizes to ONE Month in the Bridge — the Gathered Answers Must Reach the Backwrite's View of the IO, and the One-Click Backwrite Is Rehearsed Before the Parser Ships
 
 **Session:** Lee, Harrah's Northern California 3231 — "can you see why maybe it isn't back writing" (2026-10-30)
