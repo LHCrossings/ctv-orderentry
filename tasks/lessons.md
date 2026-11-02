@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Traffic PDF's Pages Are Separate FLIGHTS — Reading `pages[0]` Applied One Rotation and Left Two Days Blank (third appearance of "flight dates belong on the row")
+
+**Session:** Lee, Tatari Lectric eBikes week of 11/2 — "These instructions are multiple pages, but not all pages are being applied" (2026-11-02)
+
+**Rule:** `parse_tatari_traffic_pdf` read `pdf.pages[0]`. Tatari prints one flight per PAGE:
+page 1 = 11/04-11/08 Wed-Sun with three ISCIs (10/45/45), page 2 = 11/02-11/03 Mon-Tue with
+a different three (45/45/10), one ISCI on both. The card showed page 1, the Assign loop ran
+page 1's window, and contract 3134 ended with 150 unassigned spots on Mon-Tue beside a
+correctly rotated Wed-Sun. The 9/7 Direct Donor lesson said "grep every parser in the family
+for the same shape the day the lesson is written" and then listed Tatari among the
+"single-window formats" that `tatariPeriods()` wraps unchanged — the sweep took the parser's
+word for its own shape instead of looking at a multi-page file. SAGENT 7/22, IW CCA 10/28,
+and now Tatari: "read every page" has been written three times.
+
+**How to apply:**
+1. Every page-oriented traffic/order reader iterates `pdf.pages`; a page's own tables
+   belong to that page (`build_instruction(pages, year)` takes `(text, tables)` per page).
+   A page with ISCI rows and no Flight row, or a Flight row with no ISCI rows, REFUSES by
+   page number; a blank page is skipped. Never let one page's window stand in for another's.
+2. Dedupe a spot on `(ISCI, from, to)`, never on ISCI alone — the same creative legitimately
+   sits on two flights at different weights (the Direct Donor rule, applied here).
+3. The card emits `periods` whenever a format CAN carry more than one window; the single-
+   window case is `periods == [one]`, so the page needs no format branch.
+4. Diagnostic signature: a contract whose first days of a week are `(unassigned)` while the
+   rest carry a rotation (`trafficPalinse → TPALINSE.ID_FILMATI` grouped by DATA); one query
+   named the two days before the code was read.
+5. `ma_traffic_parser` and the Admerasia traffic readers still read `pages[0]`; no multi-page
+   file of theirs exists on hand, so they are flagged, not changed (ask-before-acting).
+
+---
+
 ## A Day-Grid Cell Is a COUNT, Not a Mark — a Line Builder Keyed on the SET of Marked Days Hard-Codes 1/Day, and "Th 1x + Fri 2x" Becomes a Line That Can Never Place
 
 **Session:** Lee, Graton 3232/3233 — "The first line has 1x on thursday and 2x on Friday. This was written as one line of 3 airings with a max of 1 per day. This never will place." (2026-10-31)

@@ -1109,3 +1109,21 @@ the AI vision fallback both misread the grid. Transcribed by eye, reconciles exa
 - [x] dry run 10/30: 54 lines / 708 spots / $15,360 net, CENTROMEDIA 316, rolled back; 0 rows left
 - [x] Lee enters live (CLI or drag-drop; answers 11/2/2026, 6 months, 25/0/0) — contract 3231 entered 10/30: 54 lines / 708 spots / $15,360, all placed
 - [x] One-click backwrite popup (SC $2,560 / 66 paid vs Etere $15,360 / 396): the generic bridge normalizer stored ONE undated month → `_normalize_harrahs` walks `order_plan` with the manifest's gathered start/months; undated manifests re-derive on retry. Lee backwrote 3231 on the legacy page meanwhile.
+
+## Tatari traffic: every page is its own flight (2026-11-02)
+
+Lee: "These instructions are multiple pages, but not all pages are being applied"
+(traffic-tatari-lectric_ebikes-crss-week-of-mon-11-02-26.pdf). The parser read
+`pdf.pages[0]` only; page 2 (11/02-11/03 Mon-Tue, its own weights) was never read.
+Contract 3134: 11/02-11/03 = 150 unassigned spots, 11/04-11/08 carried page 1's rotation.
+
+- [x] parser: walk every page; each page = one period (its ISCI table + its Flight row);
+      spots carry their page's dates; dedupe on (ISCI, from, to); instruction dates = union;
+      page with ISCI rows and no Flight (or the reverse) refuses by page number
+- [x] route: tatari card emits `periods` (Direct Donor shape, `tatariPeriods()` already walks it);
+      a parser refusal / zero periods is an error card, never a card that assigns nothing
+- [x] fixture `tests/fixtures/tatari/lectric_ebikes_week_of_11-02-26.pdf` + 10 tests
+      (two periods, shared ISCI once per flight, single-page unchanged, New Year roll, refusals)
+- [x] full unit suite 1485 passed
+- [ ] deploy, then Lee re-runs the Tatari card on 3134: period 11/04-11/08 re-applies the same
+      three creatives, period 11/02-11/03 assigns MBLBSVV130H 45 / MBSBTTV130H 45 / MBFIRIV130H 10
