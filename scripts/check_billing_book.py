@@ -112,7 +112,9 @@ def main() -> int:
     c_hdr = _header_row(cleaned_rows)
     cleaned = _data_rows(cleaned_rows, c_hdr)
     cleaned_pool = Counter(_key(r) for r in cleaned)
-    cleaned_net = sum((_money(r[21]) or Decimal(0)) for r in cleaned)
+    # Totals add the RAW cell values, the way Excel's SUM does (a column of 100.0025s
+    # shows 100.00 per row and 5,280.13 at the bottom); rows still MATCH on cents.
+    cleaned_net = sum((_raw(r[21]) or Decimal(0)) for r in cleaned)
 
     tabs = []
     for name, rows in sheets.items():
@@ -141,13 +143,13 @@ def main() -> int:
     footer_off = []  # (tab, invoice, rows net, footer net)
     respread = []  # (tab, invoice, contract, net): rows re-spread by market on CLEANED
     for name, inv, rows, footer, contract in tabs:
-        net = sum((_money(r[21]) or Decimal(0)) for r in rows)
+        net = sum((_raw(r[21]) or Decimal(0)) for r in rows)
         subcent = [r for r in rows if _is_subcent(r[21])]
-        raw_net = sum((_raw(r[21]) or Decimal(0)) for r in rows)
-        drift = (raw_net - net).quantize(Decimal("0.0001"))
+        cents_net = sum((_money(r[21]) or Decimal(0)) for r in rows)
+        drift = (net - cents_net).quantize(Decimal("0.0001"))
         if subcent and drift != 0:  # thirds that cancel (155.83 x 4 + 311.67 x 4) are fine
             rounding.append((name, inv, len(subcent), drift))
-        if footer is not None and footer != net:
+        if footer is not None and footer != net.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP):
             footer_off.append((name, inv, net, footer))
         if name in excluded:
             print(f"{name:34} {inv:9} {len(rows):5} {net:11,.2f} {'(excluded)':>11}")
@@ -159,7 +161,7 @@ def main() -> int:
             k = _key(r)
             if cleaned_pool[k] > 0:
                 cleaned_pool[k] -= 1
-                matched_net += k[4] or Decimal(0)
+                matched_net += _raw(r[21]) or Decimal(0)
             else:
                 missing.append(k)
         note = ""
@@ -171,7 +173,7 @@ def main() -> int:
             twins = [
                 r for r in cleaned if str(r[27]).strip() == contract and cleaned_pool[_key(r)] > 0
             ]
-            twin_net = sum((_money(r[21]) or Decimal(0)) for r in twins)
+            twin_net = sum((_raw(r[21]) or Decimal(0)) for r in twins)
             if twins and twin_net == net:
                 for r in twins:
                     cleaned_pool[_key(r)] -= 1
@@ -197,8 +199,8 @@ def main() -> int:
             left_rows.setdefault(k, []).append(r)
     flagged_y = [r for rs in left_rows.values() for r in rs if str(r[26]).upper() == "Y"]
     flagged_n = [r for rs in left_rows.values() for r in rs if str(r[26]).upper() != "Y"]
-    left_net_y = sum((_money(r[21]) or Decimal(0)) for r in flagged_y)
-    left_net_n = sum((_money(r[21]) or Decimal(0)) for r in flagged_n)
+    left_net_y = sum((_raw(r[21]) or Decimal(0)) for r in flagged_y)
+    left_net_n = sum((_raw(r[21]) or Decimal(0)) for r in flagged_n)
 
     print(f"\naffidavit tabs total (excluding {len(excluded)}): {aff_total:,.2f}")
     print(f"CLEANED total:                              {cleaned_net:,.2f}")
@@ -219,9 +221,11 @@ def main() -> int:
         for (code, contract), n in by_code.most_common(30):
             print(f"    {code!s:45} contract {contract!s:8} {n} row(s)")
     if rounding:
-        print("\nSub-cent Station Nets (raw sum vs the 2-decimal sum the rows display):")
+        print(
+            "\nSub-cent Station Nets (Excel's sum of the raw cells vs the sum of the cents each row displays):"
+        )
         for name, inv, n, drift in rounding:
-            print(f"  {name:34} {inv:9} {n:4} row(s)  raw - rounded = {drift:+.4f}")
+            print(f"  {name:34} {inv:9} {n:4} row(s)  raw sum - displayed sum = {drift:+.4f}")
     if footer_off:
         print("\nTabs whose printed Net Amount Due differs from the sum of their Station Net rows:")
         for name, inv, net, footer in footer_off:
