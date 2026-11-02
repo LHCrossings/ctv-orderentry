@@ -1152,3 +1152,8 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 - [x] Cause: `build_placement_csv_from_db` flattened Etere's multi-line NOTE to "; " because `parse_csv` read the header from one physical line. Etere already stores the five lines.
 - [x] Fix: the CSV keeps the newlines (csv.writer quotes them); `parse_csv` and `_extract_header_values` read CSV records. Template B22 (merged B22:G27) already wraps.
 - [x] `tests/unit/test_backwrite_notes_multiline.py`; 3053 parses to 5 note lines from the DB.
+
+## Billing book 2610 month-end check (2026-11-02)
+- [x] `scripts/check_billing_book.py` on `Master Billing Sheet 2610.xlsm` (--exclude the WSQ3 2607-508 re-send): 119 tabs row-for-row on CLEANED; CLEANED 215,158.51 = tabs 216,673.16 − 1,514.65 house lines
+- [x] Script now also prints sub-cent Station Nets (Crispin +0.13, Sagent HQ +0.16, NKB +0.004) and tabs whose footer Net Amount Due ≠ Σ Station Net (ACM PROD footer −234, San Mateo PROD rows 0 vs footer 375)
+- [ ] Lee: ACM PROD 15% footer commission on a net production charge; San Mateo PROD Station Net blank ($375 missing from CLEANED); Crispin/Sagent cents

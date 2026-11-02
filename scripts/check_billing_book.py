@@ -8,6 +8,13 @@ CLEANED tab, row for row, and nothing on CLEANED flagged Affidavit=Y may be with
 An affidavit tab is any sheet whose D1 holds an invoice number (dddd-ddd); SCRATCH, MASTER,
 CLEANED, the SAMPLE tabs and the NKB templates have none. Rows are matched as a multiset on
 (Bill Code, air date, aired time, media, net) so duplicates (Tatari rows) count exactly.
+
+Two rounding checks run per tab as well (Lee, 2610: "make sure there are no rounding issues"):
+a Station Net that is not a whole number of cents (Etere's rounded gross x 0.85 = 100.0025)
+is listed with the cents the tab's raw sum drifts from its 2-decimal sum, and the footer's
+"Net Amount Due" (computed from the gross column) is compared with the sum of the Station Net
+rows, which is what CLEANED carries. Neither is a tab-vs-CLEANED mismatch; both are printed
+for the operator to decide.
 """
 
 from __future__ import annotations
@@ -46,6 +53,28 @@ def _key(row) -> tuple:
         row[7],
         _money(row[21]),
     )
+
+
+def _raw(v) -> Decimal | None:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return Decimal(repr(v))
+
+
+def _is_subcent(v) -> bool:
+    d = _raw(v)
+    if d is None:
+        return False
+    # beyond float noise (60.00000000000001 is a whole number of cents)
+    return abs(d - d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) > Decimal("0.000001")
+
+
+def _footer_net(rows):
+    """The tab's printed "Net Amount Due" (col P of that row), or None."""
+    for r in rows:
+        if r and len(r) > 15 and r[8] == "Net Amount Due":
+            return _money(r[15])
+    return None
 
 
 def _header_row(rows, limit=30):
@@ -88,9 +117,9 @@ def main() -> int:
         if hdr_i is None:
             print(f"!! {name}: invoice {inv} but no Bill Code / Station Net header found")
             continue
-        tabs.append((name, inv.strip(), _data_rows(rows, hdr_i)))
+        tabs.append((name, inv.strip(), _data_rows(rows, hdr_i), _footer_net(rows)))
 
-    month = Counter(inv[:4] for _, inv, _ in tabs).most_common(1)[0][0]
+    month = Counter(inv[:4] for _, inv, _, _ in tabs).most_common(1)[0][0]
     excluded = set(args.exclude)
     problems = 0
     aff_total = Decimal(0)
@@ -98,8 +127,17 @@ def main() -> int:
     print(f"CLEANED: {len(cleaned):,} rows, net {cleaned_net:,.2f}")
     print(f"{len(tabs)} affidavit tabs; excluded on purpose: {sorted(excluded) or 'none'}\n")
     print(f"{'tab':34} {'invoice':9} {'rows':>5} {'tab net':>11} {'in CLEANED':>11}  note")
-    for name, inv, rows in tabs:
+    rounding = []  # (tab, invoice, sub-cent rows, raw - rounded)
+    footer_off = []  # (tab, invoice, rows net, footer net)
+    for name, inv, rows, footer in tabs:
         net = sum((_money(r[21]) or Decimal(0)) for r in rows)
+        subcent = [r for r in rows if _is_subcent(r[21])]
+        raw_net = sum((_raw(r[21]) or Decimal(0)) for r in rows)
+        drift = (raw_net - net).quantize(Decimal("0.0001"))
+        if subcent and drift != 0:  # thirds that cancel (155.83 x 4 + 311.67 x 4) are fine
+            rounding.append((name, inv, len(subcent), drift))
+        if footer is not None and footer != net:
+            footer_off.append((name, inv, net, footer))
         if name in excluded:
             print(f"{name:34} {inv:9} {len(rows):5} {net:11,.2f} {'(excluded)':>11}")
             continue
@@ -155,6 +193,16 @@ def main() -> int:
         by_code = Counter((r[0], r[27]) for r in flagged_y)
         for (code, contract), n in by_code.most_common(30):
             print(f"    {code!s:45} contract {contract!s:8} {n} row(s)")
+    if rounding:
+        print("\nSub-cent Station Nets (raw sum vs the 2-decimal sum the rows display):")
+        for name, inv, n, drift in rounding:
+            print(f"  {name:34} {inv:9} {n:4} row(s)  raw - rounded = {drift:+.4f}")
+    if footer_off:
+        print("\nTabs whose printed Net Amount Due differs from the sum of their Station Net rows:")
+        for name, inv, net, footer in footer_off:
+            print(
+                f"  {name:34} {inv:9} rows {net:11,.2f}  footer {footer:11,.2f}  ({footer - net:+,.2f})"
+            )
     print(
         f"\nRESULT: {'OK — every affidavit row is on CLEANED exactly once' if not problems else f'{problems} problem group(s) above'}"
     )
