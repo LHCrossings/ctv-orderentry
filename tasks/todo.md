@@ -1156,4 +1156,5 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 ## Billing book 2610 month-end check (2026-11-02)
 - [x] `scripts/check_billing_book.py` on `Master Billing Sheet 2610.xlsm` (--exclude the WSQ3 2607-508 re-send): 119 tabs row-for-row on CLEANED; CLEANED 215,158.51 = tabs 216,673.16 − 1,514.65 house lines
 - [x] Script now also prints sub-cent Station Nets (Crispin +0.13, Sagent HQ +0.16, NKB +0.004) and tabs whose footer Net Amount Due ≠ Σ Station Net (ACM PROD footer −234, San Mateo PROD rows 0 vs footer 375)
-- [ ] Lee: ACM PROD 15% footer commission on a net production charge; San Mateo PROD Station Net blank ($375 missing from CLEANED); Crispin/Sagent cents
+- [x] Lee removed the ACM PROD commission; ACM's 6 items vs CLEANED's 3 market rows is BY DESIGN (client sees items, we spread by market) → script matches a wholly-unmatched tab to CLEANED rows of the same contract when the net agrees
+- [ ] Lee: San Mateo PROD Station Net blank ($375 not on CLEANED); Crispin/Sagent cents

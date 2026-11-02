@@ -69,6 +69,14 @@ def _is_subcent(v) -> bool:
     return abs(d - d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) > Decimal("0.000001")
 
 
+def _contract_no(rows) -> str | None:
+    """The tab header's Contract Number (col L of that row), as text."""
+    for r in rows[:16]:
+        if r and len(r) > 11 and r[8] == "Contract Number" and r[11] not in (None, ""):
+            return str(r[11]).strip()
+    return None
+
+
 def _footer_net(rows):
     """The tab's printed "Net Amount Due" (col P of that row), or None."""
     for r in rows:
@@ -117,9 +125,11 @@ def main() -> int:
         if hdr_i is None:
             print(f"!! {name}: invoice {inv} but no Bill Code / Station Net header found")
             continue
-        tabs.append((name, inv.strip(), _data_rows(rows, hdr_i), _footer_net(rows)))
+        tabs.append(
+            (name, inv.strip(), _data_rows(rows, hdr_i), _footer_net(rows), _contract_no(rows))
+        )
 
-    month = Counter(inv[:4] for _, inv, _, _ in tabs).most_common(1)[0][0]
+    month = Counter(inv[:4] for _, inv, _, _, _ in tabs).most_common(1)[0][0]
     excluded = set(args.exclude)
     problems = 0
     aff_total = Decimal(0)
@@ -129,7 +139,8 @@ def main() -> int:
     print(f"{'tab':34} {'invoice':9} {'rows':>5} {'tab net':>11} {'in CLEANED':>11}  note")
     rounding = []  # (tab, invoice, sub-cent rows, raw - rounded)
     footer_off = []  # (tab, invoice, rows net, footer net)
-    for name, inv, rows, footer in tabs:
+    respread = []  # (tab, invoice, contract, net): rows re-spread by market on CLEANED
+    for name, inv, rows, footer, contract in tabs:
         net = sum((_money(r[21]) or Decimal(0)) for r in rows)
         subcent = [r for r in rows if _is_subcent(r[21])]
         raw_net = sum((_raw(r[21]) or Decimal(0)) for r in rows)
@@ -154,6 +165,20 @@ def main() -> int:
         note = ""
         if inv[:4] != month:
             note += f"invoice is not a {month} number; "
+        if missing and len(missing) == len(rows) and contract:
+            # Lee (11/2): a production/services tab lists what the client ordered; CLEANED
+            # carries the same money as one line per market. Same contract, same net = match.
+            twins = [
+                r for r in cleaned if str(r[27]).strip() == contract and cleaned_pool[_key(r)] > 0
+            ]
+            twin_net = sum((_money(r[21]) or Decimal(0)) for r in twins)
+            if twins and twin_net == net:
+                for r in twins:
+                    cleaned_pool[_key(r)] -= 1
+                matched_net = net
+                respread.append((name, inv, contract, net, len(twins)))
+                note += f"re-spread on CLEANED as {len(twins)} row(s) by market, same net"
+                missing = []
         if missing:
             problems += 1
             note += f"{len(missing)} row(s) NOT in CLEANED (net {sum((m[4] or Decimal(0)) for m in missing):,.2f})"
