@@ -1157,4 +1157,4 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 - [x] `scripts/check_billing_book.py` on `Master Billing Sheet 2610.xlsm` (--exclude the WSQ3 2607-508 re-send): 119 tabs row-for-row on CLEANED; CLEANED 215,158.51 = tabs 216,673.16 − 1,514.65 house lines
 - [x] Script now also prints sub-cent Station Nets (Crispin +0.13, Sagent HQ +0.16, NKB +0.004) and tabs whose footer Net Amount Due ≠ Σ Station Net (ACM PROD footer −234, San Mateo PROD rows 0 vs footer 375)
 - [x] Lee removed the ACM PROD commission; ACM's 6 items vs CLEANED's 3 market rows is BY DESIGN (client sees items, we spread by market) → script matches a wholly-unmatched tab to CLEANED rows of the same contract when the net agrees
-- [ ] Lee: San Mateo PROD Station Net blank ($375 not on CLEANED); Crispin/Sagent cents
+- [x] Lee fixed San Mateo PROD ($375 on row + CLEANED) and the ACM PROD footer; rerun OK (CLEANED 215,533.81); sent to Katherine. Crispin/Sagent sub-cent nets are NOT an issue: affidavit net == CLEANED net is the only criterion
