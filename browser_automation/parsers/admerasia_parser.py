@@ -126,6 +126,20 @@ DMA_TO_ETERE = {
 }
 
 
+# A minute field typed with an extra digit ("10:300p", "12:000a"): Admerasia types this
+# often and it always means the first two minute digits (Lee 2026-11-02, SEA 23-MD10-2611CT).
+# Entry already read it as 10:30p; the language-window check read it as 10:30 AM and
+# warned, and the verification table printed the typo. Normalised once, on the line.
+_TIME_EXTRA_DIGITS_RE = re.compile(r'(\d{1,2}:\d{2})\d+(?=\s*[apAP])')
+
+
+def normalize_time_typos(time_str: str) -> str:
+    """'10:300p-12:00a' -> '10:30p-12:00a'; well-formed strings are returned unchanged."""
+    if not time_str:
+        return time_str
+    return _TIME_EXTRA_DIGITS_RE.sub(r'\1', time_str)
+
+
 @dataclass
 class AdmerasiaLine:
     """Represents a single line item from an Admerasia order."""
@@ -138,6 +152,11 @@ class AdmerasiaLine:
     # Additional fields for pattern analysis
     _daily_spots: List[int] = None  # Daily spot counts from calendar grid
     _calendar_days: List[int] = None  # Calendar day numbers
+
+    def __post_init__(self):
+        # every producer (table, coordinate, text fallback) and every consumer
+        # (entry, verification table, bridge/language check) sees the corrected time
+        self.time = normalize_time_typos(self.time)
     
     def get_gross_rate(self) -> Decimal:
         """Calculate gross rate from net rate (net / 0.85)."""
@@ -344,12 +363,22 @@ def get_language_block_prefix(language: str) -> str:
         return "C"
 
 
+# The sheet's own total row: single-language IOs print "Order Total 39", the two-language
+# Chinese IO prints "Grand Total 47" (Lee 2026-11-02: the guard stayed silent on 23-MD10-2611CT).
+_ORDER_TOTAL_RE = re.compile(r'(?:Order|Grand)\s+Total\s+(\d+)')
+
+
+def order_total_from_text(text: str) -> Optional[int]:
+    """The IO's printed spot total, whichever wording the sheet uses; None when absent."""
+    match = _ORDER_TOTAL_RE.search(text or "")
+    return int(match.group(1)) if match else None
+
+
 def extract_order_total_from_pdf(pdf_path: str) -> Optional[int]:
-    """Extract Order Total spot count from plain text for verification cross-check."""
+    """Extract the printed spot total (Order Total / Grand Total) for the verification cross-check."""
     with pdfplumber.open(pdf_path) as pdf:
         text = pdf.pages[0].extract_text() or ""
-    match = re.search(r'Order Total\s+(\d+)', text)
-    return int(match.group(1)) if match else None
+    return order_total_from_text(text)
 
 
 def get_default_order_code(order: AdmerasiaOrder) -> str:

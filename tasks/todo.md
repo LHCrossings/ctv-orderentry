@@ -1130,3 +1130,13 @@ Contract 3134: 11/02-11/03 = 150 unassigned spots, 11/04-11/08 carried page 1's 
 - [x] "Same treatment" (Lee): MA parser reads every page + every segment is a period (route
       emits `periods`, zero rows = error card); Admerasia `resolve_traffic` refuses a multi-page
       IO by name, ISCI key read from every page; 1492 unit + 11 Admerasia legend PDF tests green
+
+## Admerasia 2611 McD batch check (2026-11-02)
+
+Lee: "Did one of these orders enter incorrectly?" — No: 3236/3237/3238 reconcile to the sheets'
+own totals (39/39/47, net $2,796.50/$1,198.50/$1,411.00 → gross exact); SF and Chinese grids
+checked cell for cell from the page image, SEA Vietnamese via the positional reader's cells.
+- [x] `extract_order_total_from_pdf` accepts "Order Total" AND "Grand Total" (Chinese IO wording)
+- [x] "10:300p" (common Admerasia typo) normalised to "10:30p" on `AdmerasiaLine.__post_init__`
+- [ ] Charmaine asks Admerasia: Sunday 11/15 7:00-7:30p on the M-F Cantonese News :30 row (line
+      87611 attached the Hmong Report block), and the Mandarin :30 listed in the Cantonese ISCI block
