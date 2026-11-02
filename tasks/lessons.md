@@ -4,6 +4,34 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A `%-H` in a Nested Formatter Reached the Windows Server — Checklist Rule 12 Was Pinned Nowhere, and the Crash Waited for the First Cell of the OTHER Type
+
+**Session:** Lee, "Unexpected token 'I', "Internal S"... is not valid JSON" opening the SFO log for 11/2 (2026-11-02)
+
+**Rule:** The log viewer's `_fmt_t` formatted a `timedelta` by hand and everything else with
+`strftime("%-H:%M:%S")`. Checklist rule 12 (6/11) says `%-d`/`%-m` are glibc-only and crash on
+Windows, where every server runs; it was prose, so a nested helper written later kept the
+directive. It never fired because every log cell is `[h]:mm:ss` (openpyxl → `timedelta`). SFO
+11/2 Monday had two program rows pasted in as `h:mm:ss` (→ `datetime.time`), the first such cell
+raised `ValueError: Invalid format string`, FastAPI answered 500 "Internal Server Error", and the
+page's `JSON.parse` printed the first bytes of that body. Same family as 10/14 ("a comment is
+not a constraint") and the `$args` PowerShell trap: a rule that exists only in a checklist is
+re-broken by the next helper.
+
+**How to apply:**
+1. Format times from fields (`f"{h}:{m:02d}:{s:02d}"`), never `strftime` with `%-`;
+   `tests/unit/test_log_time_format_windows_safe.py` greps src/browser_automation/scripts for
+   the directive and pins every openpyxl cell shape (`timedelta`, `time`, `datetime`, str).
+2. "Unexpected token 'I' … not valid JSON" from any page = a 500 whose body the client tried
+   to parse. Reproduce the endpoint's `_run` with the WINDOWS checkout's Python
+   (`/mnt/c/Users/scrib/windev/ctv-orderentry/.venv/Scripts/python.exe`, K: is not mounted in
+   WSL); a Linux reproduction cannot see a platform-only crash.
+3. A per-cell formatter is exercised by the cell TYPES the sheet can carry, not the ones the
+   usual sheet carries: list openpyxl's return types for each number format the column can
+   have and test each one.
+
+---
+
 ## A Window Table With ONE Classifier Had a SECOND Reader in SQL — `ORA <= "23:59"` Dropped Every Spot After 23:59:00, and an Inclusive End Let One Minute Belong to Two Languages
 
 **Session:** Lee, Toyota 13938 — "assigned traffic to all spots, except one spot that airs in CVC at 1159 on 11/4" … "it should apply Cantonese through 23:59:59" (2026-11-02)

@@ -1140,3 +1140,9 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 - [x] "10:300p" (common Admerasia typo) normalised to "10:30p" on `AdmerasiaLine.__post_init__`
 - [ ] Charmaine asks Admerasia: Sunday 11/15 7:00-7:30p on the M-F Cantonese News :30 row (line
       87611 attached the Hmong Report block), and the Mandarin :30 listed in the Cantonese ISCI block
+
+## Log viewer: SFO 11/2 "Unexpected token 'I', Internal S..." (2026-11-02)
+
+- [x] Reproduce with the Windows checkout's Python against `K:\Traffic\logs\2026\11 November 2026\SFO Log - 261102.xlsm`: Monday rows 25 (Big News 13:30-14:00) and 29 (To the Point 14:00-15:00) are `h:mm:ss` cells (openpyxl → `datetime.time`) among `[h]:mm:ss` rows (→ `timedelta`); `_fmt_t` ran `strftime("%-H:%M:%S")` → `ValueError: Invalid format string` on Windows → 500 → the page JSON-parsed "Internal Server Error".
+- [x] `_fmt_log_time` (module level, field-based, no strftime) replaces the nested `_fmt_t`; `tests/unit/test_log_time_format_windows_safe.py` pins every cell shape and greps src/browser_automation/scripts for any `strftime("…%-x")`.
+- [x] Commit, push, post_push; Lee restarts his local server.

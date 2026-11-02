@@ -398,6 +398,27 @@ def _wb_save_fast(wb, path: Path, transform=None) -> None:
         raise
 
 
+def _fmt_log_time(val) -> str:
+    """Render a traffic-log time cell as H:MM:SS.
+
+    openpyxl hands back a ``timedelta`` for an ``[h]:mm:ss`` cell and a
+    ``datetime.time`` / ``datetime`` for an ``h:mm:ss`` one (a row pasted in with
+    a different number format). Both are formatted from their fields: strftime's
+    ``%-H`` is glibc-only and raises ``ValueError: Invalid format string`` on the
+    Windows server (SFO 11/2 Monday, rows 25 and 29, Lee 2026-11-02).
+    """
+    if val is None:
+        return ""
+    if isinstance(val, timedelta):
+        total = int(val.total_seconds())
+        h, rem = divmod(total, 3600)
+        m, s = divmod(rem, 60)
+        return f"{h}:{m:02d}:{s:02d}"
+    if hasattr(val, "hour") and hasattr(val, "minute"):
+        return f"{val.hour}:{val.minute:02d}:{getattr(val, 'second', 0):02d}"
+    return str(val)
+
+
 def _find_traffic_log(mkt: str, target: _date_cls) -> Optional[Path]:
     """Locate weekly traffic log .xlsm for a market and any date in that broadcast week."""
     monday = target - timedelta(days=target.weekday())
@@ -6162,17 +6183,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.get("/api/master-control/logs/load")
     async def load_traffic_log(date: str = Query(...), market: str = Query(...)):
 
-        def _fmt_t(val) -> str:
-            if val is None:
-                return ""
-            if isinstance(val, timedelta):
-                total = int(val.total_seconds())
-                h, rem = divmod(total, 3600)
-                m, s = divmod(rem, 60)
-                return f"{h}:{m:02d}:{s:02d}"
-            if hasattr(val, "strftime"):
-                return val.strftime("%-H:%M:%S")
-            return str(val)
+        _fmt_t = _fmt_log_time
 
         def _run():
             target = _date_cls.fromisoformat(date)
