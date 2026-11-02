@@ -528,6 +528,20 @@ def _mc_fill_program_spots(
     return results
 
 
+def _lang_window_frames(t_from: str, t_to: str) -> tuple[int, int]:
+    """A language window as [start, end) TPALINSE.ORA frame bounds.
+
+    One rule with the entry-time classifier (``language_windows._win_bounds``): start
+    inclusive, end EXCLUSIVE, an end written "23:59" means end of broadcast day (24:00),
+    hours < 06:00 are the post-midnight tail. The old ``ORA <= frames("23:59")`` left
+    every spot placed after 23:59:00 outside every window (Toyota 13938 CVC, the
+    23:59:10 bonus spot in the Wednesday Cantonese 23:30-23:59 block, Lee 2026-11-02),
+    and its inclusive end let 20:00:00 satisfy Cantonese 19-20 AND Mandarin 20-23:30.
+    """
+    lo_min, hi_min = _lw._win_bounds(t_from, t_to)
+    return round(lo_min * 60 * _FPS_GLOBAL), round(hi_min * 60 * _FPS_GLOBAL)
+
+
 def _build_spot_filter(filters: dict) -> str:
     """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
     import re
@@ -567,11 +581,10 @@ def _build_spot_filter(filters: dict) -> str:
         for lang in filters["languages"]:
             for days_set, t_from, t_to in lang_table.get(lang, []):
                 day_list = ",".join(f"'{d}'" for d in sorted(days_set))
-                f_from = _hhmm_to_frames(t_from)
-                f_to = _hhmm_to_frames(t_to)
+                f_from, f_to = _lang_window_frames(t_from, t_to)
                 lang_subclauses.append(
                     f"(DATENAME(weekday, tp.DATA) IN ({day_list})"
-                    f" AND tp.ORA >= {f_from} AND tp.ORA <= {f_to})"
+                    f" AND tp.ORA >= {f_from} AND tp.ORA < {f_to})"
                 )
         if lang_subclauses:
             clauses.append("(" + " OR ".join(lang_subclauses) + ")")
@@ -10682,11 +10695,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if not time_from:
                     return ""
                 lang_table = _DAL_LANG_WINDOWS if mkt_id == 10 else _CTV_LANG_WINDOWS
+                hh, mm = time_from.split(":")[:2]
+                minute = int(hh) * 60 + int(mm)
+                if minute < 6 * 60:  # post-midnight tail of the broadcast day
+                    minute += 24 * 60
                 for lang, windows in lang_table.items():
                     if lang in _SKIP_COMPOSITE:
                         continue
                     for _days, w_from, w_to in windows:
-                        if w_from <= time_from < w_to:
+                        lo, hi = _lw._win_bounds(w_from, w_to)  # "23:59" end = 24:00
+                        if lo <= minute < hi:
                             return lang
                 return ""
 

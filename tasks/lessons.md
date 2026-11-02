@@ -4,6 +4,32 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Window Table With ONE Classifier Had a SECOND Reader in SQL — `ORA <= "23:59"` Dropped Every Spot After 23:59:00, and an Inclusive End Let One Minute Belong to Two Languages
+
+**Session:** Lee, Toyota 13938 — "assigned traffic to all spots, except one spot that airs in CVC at 1159 on 11/4" … "it should apply Cantonese through 23:59:59" (2026-11-02)
+
+**Rule:** The 8/7 point-in-time lesson gave `language_windows._win_bounds` the three rules
+(start inclusive, end EXCLUSIVE, "23:59" means 24:00, <06:00 is the tail) and the
+invariant test. The traffic-assign SQL in `_build_spot_filter` rendered the SAME table
+by itself: `tp.ORA >= frames(from) AND tp.ORA <= frames(to)`, so the Wednesday Cantonese
+23:30-23:59 block ended at 23:59:00 and the 23:59:10 bonus spot in the last break matched
+no language (unassigned, invisible among 100+ assigned siblings), while 20:00:00 Monday
+satisfied Cantonese 19-20 and Mandarin 20-23:30 both. A second string-comparison reader
+(`_get_language_for_time`, `w_from <= "HH:MM" < w_to`) had the same 23:59 hole. Same
+family as the 10/14 MARKET_TZ mirror and the 7/29 client/server grouping: a rule fixed
+in the classifier is not fixed in the SQL that renders the same table.
+
+**How to apply:**
+1. Every consumer of a window table goes through ONE bounds function (`_lang_window_frames`
+   → `_win_bounds`); `tests/unit/test_spot_filter_language_windows.py` renders the filter
+   and asserts no `tp.ORA <=`, 23:59:59 inside, 20:00:00 in one language only.
+2. Diagnostic signature: one unassigned spot in the day's LAST break (23:59:xx) on an
+   otherwise fully assigned contract; the ORA sits past the table's "23:59".
+3. Verify by rendering the filter against the real contract (3027, 11/4: spot 15512984
+   now selected) before deploying; the re-run of the HL card assigns it.
+
+---
+
 ## A Traffic PDF's Pages Are Separate FLIGHTS — Reading `pages[0]` Applied One Rotation and Left Two Days Blank (third appearance of "flight dates belong on the row")
 
 **Session:** Lee, Tatari Lectric eBikes week of 11/2 — "These instructions are multiple pages, but not all pages are being applied" (2026-11-02)
