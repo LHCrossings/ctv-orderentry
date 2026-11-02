@@ -4,6 +4,28 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Check That Rounds Each Row Before Adding Reports a Mismatch Excel Does Not Have — Sum the Way the Book Sums, and the Criterion Is the User's Sentence, Not Mine
+
+**Session:** Lee, billing book 2610 month-end check — "Wait. I think you are wrong … Crispin, if I highlight the lines for net on the cleaned tab, comes out to 5280.13. That's exactly what the affidavit shows" (2026-11-02)
+
+**Rule:** `check_billing_book.py` quantized every Station Net to cents (needed for row MATCHING)
+and then also summed those quantized values for the totals, so a column of 100.0025s printed
+5,280.00 while the affidavit footer and Excel's SUM of the same CLEANED cells both say
+5,280.13. I reported "rows/CLEANED 5,280.00 vs printed 5,280.13" as a rounding problem, and
+started tracing the gross-up path, when the affidavit and CLEANED agreed to the cent. Lee's
+criterion is one sentence: the affidavit's net must equal the CLEANED net for that contract.
+Sub-cent per-spot nets are not a defect under it.
+
+**How to apply:**
+1. A reconciliation totals the way the artifact it checks totals: raw cell values for Excel
+   SUMs, quantized values only for matching keys. Say which one a printed number is.
+2. Before calling a cents difference a problem, reproduce the user's own check (highlight the
+   rows, read the footer); if they agree, there is no problem to trace.
+3. Ask for the pass/fail sentence before proposing a fix to the pipeline; "I have got to fix
+   whatever is introducing these rounding errors" was retracted once the totals agreed.
+
+---
+
 ## A `%-H` in a Nested Formatter Reached the Windows Server — Checklist Rule 12 Was Pinned Nowhere, and the Crash Waited for the First Cell of the OTHER Type
 
 **Session:** Lee, "Unexpected token 'I', "Internal S"... is not valid JSON" opening the SFO log for 11/2 (2026-11-02)
