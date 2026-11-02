@@ -17,23 +17,24 @@ from dataclasses import dataclass, field
 from datetime import date
 
 try:
+    from . import admerasia_parser as _ap
     from .admerasia_traffic_color import read_color_grid
     from .admerasia_traffic_legend import read_text_legend
     from .admerasia_traffic_match import match_creatives
-    from .admerasia_vision import extract_isci_legend, extract_grid
-    from . import admerasia_parser as _ap
+    from .admerasia_vision import extract_grid, extract_isci_legend
 except ImportError:
+    import admerasia_parser as _ap
     from admerasia_traffic_color import read_color_grid
     from admerasia_traffic_legend import read_text_legend
     from admerasia_traffic_match import match_creatives
-    from admerasia_vision import extract_isci_legend, extract_grid
-    import admerasia_parser as _ap
+    from admerasia_vision import extract_grid, extract_isci_legend
 
 try:
     from ..language_windows import classify_language_frames
 except ImportError:  # direct-script / non-package import
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from language_windows import classify_language_frames
 
@@ -71,11 +72,14 @@ def _daypart_to_frames(daypart: str):
     else:
         # try the end's period; if that runs backwards (e.g. 11:30-12:00p), flip it
         s_same = mins(a[0], a[1], end_suf)
-        start = s_same if (s_same is not None and s_same < end) else \
-            mins(a[0], a[1], "a" if end_suf == "p" else "p")
+        start = (
+            s_same
+            if (s_same is not None and s_same < end)
+            else mins(a[0], a[1], "a" if end_suf == "p" else "p")
+        )
     if start is None or end is None or end <= start:
         return None
-    if end - start > 240:      # >4h daypart = vision typo (e.g. '10:300p'); don't trust it
+    if end - start > 240:  # >4h daypart = vision typo (e.g. '10:300p'); don't trust it
         return None
     return (round(start * 60 * _FPS), round(end * 60 * _FPS))
 
@@ -85,9 +89,9 @@ class TrafficResult:
     order_number: str
     contract_id: int | None
     contract_code: str | None
-    assignments: list = field(default_factory=list)   # SpotAssignment
+    assignments: list = field(default_factory=list)  # SpotAssignment
     warnings: list = field(default_factory=list)
-    legend: list = field(default_factory=list)         # [(isci, duration_sec, rgb, color_name)]
+    legend: list = field(default_factory=list)  # [(isci, duration_sec, rgb, color_name)]
     ok: bool = False
 
 
@@ -95,11 +99,19 @@ def _dist(a, b):
     return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
 
+def _page_count(pdf_path: str) -> int:
+    import pdfplumber
+
+    with pdfplumber.open(pdf_path) as pdf:
+        return len(pdf.pages)
+
+
 def _io_header(pdf_path: str):
     """(order_number, flight_start) from the IO text. flight_start is the campaign
     start = the date of calendar-grid column 0 (what the entry parser aligns to) —
     NOT the earliest contract line, which may begin a day or two into the grid."""
     import pdfplumber
+
     with pdfplumber.open(pdf_path) as pdf:
         text = pdf.pages[0].extract_text() or ""
     order_no = _ap._extract_order_number(text)
@@ -119,7 +131,7 @@ def find_contract(cur, order_number: str):
     return rows[0] if len(rows) == 1 else (rows if rows else None)
 
 
-_LEGEND_COLOR_TOL = 40     # RGB distance; palette colours are separated far wider than this
+_LEGEND_COLOR_TOL = 40  # RGB distance; palette colours are separated far wider than this
 
 
 def _assign_clusters(palette, legend_rows):
@@ -129,6 +141,7 @@ def _assign_clusters(palette, legend_rows):
     Used only on the VISION fallback path, which cannot report language — the result is
     lifted to the language-keyed shape with a single ``None`` key."""
     import itertools
+
     leg = [(r.isci_code, tuple(r.color_rgb)) for r in legend_rows]
     K = len(palette)
     if K > len(leg):
@@ -155,13 +168,17 @@ def _assign_clusters_by_language(palette, legend_rows):
         rgb = tuple(r.color_rgb)
         i = min(range(len(palette)), key=lambda k: _dist(palette[k], rgb))
         if len(palette) > 1 and _dist(palette[i], rgb) > _LEGEND_COLOR_TOL:
-            warnings.append(f"legend creative {r.isci_code} ({r.language}) colour {rgb} "
-                            "matches no colour used in the grid — not scheduled?")
+            warnings.append(
+                f"legend creative {r.isci_code} ({r.language}) colour {rgb} "
+                "matches no colour used in the grid — not scheduled?"
+            )
             continue
         prev = out.setdefault(i, {}).get(r.language)
         if prev and prev != r.isci_code:
-            warnings.append(f"two {r.language} creatives share grid colour {palette[i]} "
-                            f"({prev} and {r.isci_code}) — cannot tell them apart")
+            warnings.append(
+                f"two {r.language} creatives share grid colour {palette[i]} "
+                f"({prev} and {r.isci_code}) — cannot tell them apart"
+            )
         out.setdefault(i, {})[r.language] = r.isci_code
     for i in range(len(palette)):
         if i not in out:
@@ -195,17 +212,34 @@ def _contract_spots(cur, contract_id):
     spots = []
     for r in cur.fetchall():
         d = date.fromisoformat(r["dt"])
-        spots.append({
-            "id": r["id"], "date": d, "ora": r["ora"], "duration": r["dur"],
-            "market": r["mkt"],
-            "languages": classify_language_frames(d.strftime("%A"), r["ora"], r["mkt"], _FPS),
-        })
+        spots.append(
+            {
+                "id": r["id"],
+                "date": d,
+                "ora": r["ora"],
+                "duration": r["dur"],
+                "market": r["mkt"],
+                "languages": classify_language_frames(d.strftime("%A"), r["ora"], r["mkt"], _FPS),
+            }
+        )
     return spots
 
 
 def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     """Full pipeline. `cur` is a live as_dict DB cursor. `legend` (list of LegendRow)
     may be injected for testing; otherwise read via vision."""
+    # Every reader below (grid geometry, cell colours, text legend, vision legend)
+    # covers page 1 only; every Admerasia IO seen so far IS one page. A longer IO
+    # refuses here, by name, rather than matching page 1 and silently dropping the
+    # rest (the Tatari "pages[0]" lesson, 2026-11-02).
+    pages = _page_count(pdf_path)
+    if pages > 1:
+        res = TrafficResult(order_number="", contract_id=None, contract_code=None)
+        res.warnings.append(
+            f"IO has {pages} pages; the Admerasia traffic reader covers page 1 only — "
+            "not matched. Send the IO to Lee to extend the reader."
+        )
+        return res
     order_no, flight_start = _io_header(pdf_path)
     res = TrafficResult(order_number=order_no, contract_id=None, contract_code=None)
     if flight_start is None:
@@ -217,7 +251,9 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
         res.warnings.append(f"No contract found with CUSTOMERREF = {order_no!r}")
         return res
     if isinstance(found, list):
-        res.warnings.append(f"{len(found)} contracts share CUSTOMERREF {order_no!r} — disambiguation needed")
+        res.warnings.append(
+            f"{len(found)} contracts share CUSTOMERREF {order_no!r} — disambiguation needed"
+        )
         return res
     res.contract_id, res.contract_code = found["id"], found["code"]
 
@@ -233,20 +269,25 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
             res.warnings.extend(text_legend.warnings)
         else:
             res.warnings.extend(text_legend.warnings)
-            res.warnings.append("legend text unreadable — falling back to the vision legend "
-                                "(language cannot be resolved from a vision legend)")
+            res.warnings.append(
+                "legend text unreadable — falling back to the vision legend "
+                "(language cannot be resolved from a vision legend)"
+            )
             legend = extract_isci_legend(pdf_path).rows
     # dicts, not tuples — the shape grows as the legend gains fields (language, title)
     # and positional unpacking at the consumer breaks silently when it does.
-    res.legend = [{
-        "isci":     r.isci_code,
-        "duration": r.duration_sec,
-        "rgb":      list(r.color_rgb),
-        "language": getattr(r, "language", None),
-        # Creative title when we read it from text; the vision legend only knows a
-        # colour name ("pale green"), so fall back to that.
-        "name":     getattr(r, "title", "") or r.color_name,
-    } for r in legend]
+    res.legend = [
+        {
+            "isci": r.isci_code,
+            "duration": r.duration_sec,
+            "rgb": list(r.color_rgb),
+            "language": getattr(r, "language", None),
+            # Creative title when we read it from text; the vision legend only knows a
+            # colour name ("pale green"), so fall back to that.
+            "name": getattr(r, "title", "") or r.color_name,
+        }
+        for r in legend
+    ]
 
     if any(getattr(r, "language", None) for r in legend):
         cluster_lang_isci, cl_warn = _assign_clusters_by_language(color_grid.palette, legend)
@@ -254,7 +295,9 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     else:
         cluster_lang_isci = _assign_clusters(color_grid.palette, legend)
     if not cluster_lang_isci:
-        res.warnings.append(f"grid has {len(color_grid.palette)} colours but legend has {len(legend)} creatives")
+        res.warnings.append(
+            f"grid has {len(color_grid.palette)} colours but legend has {len(legend)} creatives"
+        )
         return res
 
     # A colour shared by >1 language can only be resolved from the spot's airtime.
@@ -262,7 +305,8 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     if multi:
         res.warnings.append(
             f"{len(multi)} grid colour(s) are shared by multiple languages — "
-            "resolving each spot's language from its airtime")
+            "resolving each spot's language from its airtime"
+        )
 
     filmati = _filmati_by_isci(cur, [r.isci_code for r in legend])
     missing = sorted({r.isci_code for r in legend if r.isci_code not in filmati})
@@ -283,7 +327,8 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     for c in color_grid.cells:
         for isci in (cluster_lang_isci.get(c.cluster) or {}).values():
             d = legend_secs.get(isci) or (
-                round(filmati[isci]["duration"] / _FPS) if isci in filmati else None)
+                round(filmati[isci]["duration"] / _FPS) if isci in filmati else None
+            )
             if d:
                 row_dur.setdefault(c.row, d)
                 break
@@ -298,10 +343,13 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
             if w:
                 row_window[i] = w
     except Exception as exc:  # noqa: BLE001
-        res.warnings.append(f"daypart windows unavailable ({exc}); same-day same-duration ties may fail")
+        res.warnings.append(
+            f"daypart windows unavailable ({exc}); same-day same-duration ties may fail"
+        )
 
-    m = match_creatives(color_grid, row_dur, row_window, cluster_lang_isci, flight_start,
-                        spots, filmati)
+    m = match_creatives(
+        color_grid, row_dur, row_window, cluster_lang_isci, flight_start, spots, filmati
+    )
     res.assignments = m.assignments
     res.warnings.extend(m.warnings)
     res.ok = bool(m.writable) and not any(not a.ok for a in m.assignments)

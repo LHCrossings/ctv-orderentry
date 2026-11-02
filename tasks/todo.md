@@ -1127,3 +1127,6 @@ Contract 3134: 11/02-11/03 = 150 unassigned spots, 11/04-11/08 carried page 1's 
 - [x] full unit suite 1485 passed
 - [ ] deploy, then Lee re-runs the Tatari card on 3134: period 11/04-11/08 re-applies the same
       three creatives, period 11/02-11/03 assigns MBLBSVV130H 45 / MBSBTTV130H 45 / MBFIRIV130H 10
+- [x] "Same treatment" (Lee): MA parser reads every page + every segment is a period (route
+      emits `periods`, zero rows = error card); Admerasia `resolve_traffic` refuses a multi-page
+      IO by name, ISCI key read from every page; 1492 unit + 11 Admerasia legend PDF tests green

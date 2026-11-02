@@ -30,8 +30,14 @@ and now Tatari: "read every page" has been written three times.
 4. Diagnostic signature: a contract whose first days of a week are `(unassigned)` while the
    rest carry a rotation (`trafficPalinse → TPALINSE.ID_FILMATI` grouped by DATA); one query
    named the two days before the code was read.
-5. `ma_traffic_parser` and the Admerasia traffic readers still read `pages[0]`; no multi-page
-   file of theirs exists on hand, so they are flagged, not changed (ask-before-acting).
+5. Same treatment the same day (Lee: "Same treatment"): `ma_traffic_parser` reads every
+   page and keeps EVERY date segment as a period (it had kept the one segment with the
+   most ISCIs as "the primary rotation" and dropped the rest); no MA traffic PDF is on
+   hand (the seven "MA" files in incoming/Used are WorldLink IOs for MA clients), so the
+   shape is pinned on hand-built row text. The Admerasia traffic readers (grid geometry,
+   cell colours, text and vision legends) are page-1 by design and all 16 IOs on hand are
+   one page, so `resolve_traffic` REFUSES a multi-page IO by name instead of matching
+   page 1 silently; the ISCI key is read from every page.
 
 ---
 

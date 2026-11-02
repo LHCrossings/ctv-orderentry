@@ -1,8 +1,8 @@
 import io
 import re
 
-_ISCI_RE = re.compile(r'([A-Z]{4,6}\d{5,6}[A-Z]{2})')
-_DUR_RE  = re.compile(r':(\d+)')
+_ISCI_RE = re.compile(r"([A-Z]{4,6}\d{5,6}[A-Z]{2})")
+_DUR_RE = re.compile(r":(\d+)")
 
 
 def parse_admerasia_io_lines(pdf_bytes: bytes) -> list:
@@ -13,6 +13,7 @@ def parse_admerasia_io_lines(pdf_bytes: bytes) -> list:
     """
     try:
         from browser_automation.parsers.admerasia_parser import parse_admerasia_pdf
+
         order = parse_admerasia_pdf(pdf_bytes)
     except Exception:
         return []
@@ -24,10 +25,12 @@ def parse_admerasia_io_lines(pdf_bytes: bytes) -> list:
         if key in seen:
             continue
         seen.add(key)
-        result.append({
-            "description":  line.time,
-            "duration_sec": line.spot_length,
-        })
+        result.append(
+            {
+                "description": line.time,
+                "duration_sec": line.spot_length,
+            }
+        )
     return result
 
 
@@ -42,7 +45,8 @@ def parse_admerasia_io_iscis(pdf_bytes: bytes) -> list:
     seen = set()
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        text = pdf.pages[0].extract_text() or ""
+        # the ISCI key may continue past page 1; read every page's text
+        text = "\n".join(p.extract_text() or "" for p in pdf.pages)
 
     for line in text.splitlines():
         m = _ISCI_RE.search(line)
@@ -50,26 +54,28 @@ def parse_admerasia_io_iscis(pdf_bytes: bytes) -> list:
             continue
         isci_code = m.group(1)
         # McDonald's ISCIs are 4 letters + 6 digits + 2 letters; 'O' at position 4 is a typo for '0'
-        if len(isci_code) >= 5 and isci_code[4] == 'O':
-            isci_code = isci_code[:4] + '0' + isci_code[5:]
+        if len(isci_code) >= 5 and isci_code[4] == "O":
+            isci_code = isci_code[:4] + "0" + isci_code[5:]
         if isci_code in seen:
             continue
         seen.add(isci_code)
 
-        before = line[:m.start()]
+        before = line[: m.start()]
         dur_m = _DUR_RE.search(before)
         duration_sec = int(dur_m.group(1)) if dur_m else 15
 
         if dur_m:
-            title = before[dur_m.end():].strip()
+            title = before[dur_m.end() :].strip()
         else:
             title = before.strip()
-        title = re.sub(r'^[\s:]+', '', title).strip()
+        title = re.sub(r"^[\s:]+", "", title).strip()
 
-        results.append({
-            "duration_sec": duration_sec,
-            "title":        title,
-            "isci_code":    isci_code,
-        })
+        results.append(
+            {
+                "duration_sec": duration_sec,
+                "title": title,
+                "isci_code": isci_code,
+            }
+        )
 
     return results
