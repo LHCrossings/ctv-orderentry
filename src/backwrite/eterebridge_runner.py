@@ -679,9 +679,11 @@ def build_placement_csv_from_db(
     agency_address = hdr["agency_address"] or ""
     agency_city = hdr["agency_city"] or ""
     ae_name = hdr["ae_name"] or ""  # account executive (CONTRATTITESTATA.AGENTE1)
-    # Notes may be multi-line in Etere; collapse to one line so it survives the
-    # single-row CSV header encoding read back by parse_csv.
-    notes = (hdr["notes"] or "").replace("\r", " ").replace("\n", "; ").strip()
+    # Notes are multi-line in Etere (Admerasia: Ref / Campaign / Period / DMA /
+    # restrictions, one per line) and stay that way: csv.writer quotes the field
+    # and parse_csv reads the header as a CSV record, so the Sales Confirmation's
+    # Additional Notes cell shows one item per line (Lee 2026-11-02, 3053).
+    notes = (hdr["notes"] or "").replace("\r\n", "\n").replace("\r", "\n").strip()
 
     buf = _io.StringIO()
     w = _csv.writer(buf)
@@ -916,13 +918,14 @@ def _extract_header_values(file_path: str) -> tuple[str, str]:
     Matches EtereBridge's extract_header_values() logic exactly.
     """
     try:
-        with open(file_path, "r") as f:
-            f.readline()  # skip row 1 (column labels)
-            second_line = f.readline().strip()
-        if not second_line:
+        # Read RECORDS, not physical lines: the notes column (8) may be a quoted
+        # multi-line field, so row 2 can span several lines of the file.
+        with open(file_path, "r", newline="") as f:
+            reader = csv.reader(f)
+            next(reader, None)  # skip row 1 (column labels)
+            parts = next(reader, [])
+        if not any(p.strip() for p in parts):
             return "", ""
-        reader = csv.reader([second_line])
-        parts = next(reader)
         first = parts[0].strip() if len(parts) > 0 else ""
         second = parts[5].strip() if len(parts) > 5 else ""
         return first, second

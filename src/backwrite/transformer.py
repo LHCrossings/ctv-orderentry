@@ -17,6 +17,7 @@ CSV format expected (Etere export):
 import calendar
 import copy
 import csv
+import io
 import re
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -207,11 +208,13 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
     text = data.decode("utf-8-sig")
     lines = text.splitlines()
 
-    # ── Header values from row 2 ──────────────────────────────────────────
+    # ── Header values from record 2 ───────────────────────────────────────
+    # Parsed as CSV RECORDS, not physical lines: the notes column is a quoted
+    # field that keeps Etere's line breaks (one item per line in the workbook).
     h_parts: List[str] = []
-    if len(lines) >= 2:
-        reader = csv.reader([lines[1]])
-        h_parts = next(reader, [])
+    _rec = csv.reader(io.StringIO(text))
+    next(_rec, None)
+    h_parts = next(_rec, []) or []
 
     csv_header = CsvHeader(
         agency=h_parts[0].strip() if len(h_parts) > 0 else "",

@@ -1146,3 +1146,9 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 - [x] Reproduce with the Windows checkout's Python against `K:\Traffic\logs\2026\11 November 2026\SFO Log - 261102.xlsm`: Monday rows 25 (Big News 13:30-14:00) and 29 (To the Point 14:00-15:00) are `h:mm:ss` cells (openpyxl → `datetime.time`) among `[h]:mm:ss` rows (→ `timedelta`); `_fmt_t` ran `strftime("%-H:%M:%S")` → `ValueError: Invalid format string` on Windows → 500 → the page JSON-parsed "Internal Server Error".
 - [x] `_fmt_log_time` (module level, field-based, no strftime) replaces the nested `_fmt_t`; `tests/unit/test_log_time_format_windows_safe.py` pins every cell shape and greps src/browser_automation/scripts for any `strftime("…%-x")`.
 - [x] Commit, push, post_push; Lee restarts his local server.
+
+## Backwrite: contract Notes one item per line (Admerasia 3053, 2026-11-02)
+
+- [x] Cause: `build_placement_csv_from_db` flattened Etere's multi-line NOTE to "; " because `parse_csv` read the header from one physical line. Etere already stores the five lines.
+- [x] Fix: the CSV keeps the newlines (csv.writer quotes them); `parse_csv` and `_extract_header_values` read CSV records. Template B22 (merged B22:G27) already wraps.
+- [x] `tests/unit/test_backwrite_notes_multiline.py`; 3053 parses to 5 note lines from the DB.
