@@ -4,6 +4,33 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Plan That Reads the Real Clock Has Tests That Expire — Inject `today`, Pin It to the Day the IO Arrived, and Test the Trim on Its Own
+
+**Session:** Lee, "I'm getting github errors" on a push that touched nothing near Graton (2026-11-03)
+
+**Rule:** `TimeAdvertisingLine.get_etere_lines()` trims a first week that is already in the past to
+its first spot day (`datetime.today()`), and the 10/31 tests asserted the untrimmed 11/02 dates.
+They were green for two days and failed on 11/03 in CI and locally, on a commit about the Phoenix
+recorder. The placeability test had a second latent error the trim exposed: a Friday-to-Friday
+block (11/06-11/27, 21 days) was counted as three weeks by `(d1 - d0 + 6) // 7` while it holds
+four Fridays, so a correct 8-spot block "could not place". Same family as the 9/29 "a buyer's
+date cell carries the year it was typed with": a date derived from the clock at test-writing time
+is a typo waiting for the calendar.
+
+**How to apply:**
+1. Any function whose output depends on the current date takes `today=` (default the real
+   clock); callers in production pass nothing, tests pass a fixed date (`_RECEIVED`, the day the
+   fixture arrived) and never read the clock.
+2. The clock-dependent branch gets its OWN test with a `today` that triggers it (11/03: R opens
+   11/05, F opens 11/06, spot counts unchanged), and the invariant test runs across several
+   `today` values (received, after Monday, after the first week).
+3. A week count for a block that starts on its first spot day and ends on its last is
+   `days // 7 + 1`, never a rounded-up quotient.
+4. When CI fails on a push, read the failing test NAMES before the diff: a test about a parser
+   you did not touch, failing on a date assertion, is the calendar, not the push.
+
+---
+
 ## A Fix Keyed on the EVENT That Was Seen (a Reconnect) Misses the Same DAMAGE From Another Cause — Key the Split on the Damage Itself, and Measure the Position of a Loss Before Naming Its Source
 
 **Session:** Lee, Jenna's "another file flashing black, the 7 AM file" (11/1 07:00) three days after the reconnect split (2026-11-02)
