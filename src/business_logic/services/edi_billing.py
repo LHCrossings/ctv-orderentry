@@ -43,6 +43,9 @@ _PRODUCTION_ONLY_RE = re.compile(r"charges are for production only", re.IGNORECA
 # "Production Charges"); the Estimate field "PRODUCTION CHARGES EST 4828" and the
 # single PRD row "Sep-26 Est 4828 Production Charges 1 PRD 4828-PRD $ 3,176.47" are
 # the document's own markers and also carry the estimate number.
+# R31 field widths for the values the affidavit's comment box can carry.
+COMMENT_FIELD_WIDTH = {"product_name": 25, "agency_ad_code": 8, "agency_prod_code": 8}
+
 _PRODUCTION_EST_RE = re.compile(r"PRODUCTION\s+CHARGES\s+EST\.?\s+(\S+)", re.IGNORECASE)
 _PRODUCTION_ROW_RE = re.compile(
     r"^\S+\s+Est\.?\s+(\S+)\s+Production\s+Charges\s+\d+\s+PRD\b", re.IGNORECASE | re.MULTILINE
@@ -115,6 +118,7 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
 
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             page_texts = [p.extract_text() or "" for p in pdf.pages]
+            box_lines = _comment_box_lines(pdf.pages)
 
         full_text = "\n".join(page_texts)
         page2_text = page_texts[1] if len(page_texts) > 1 else (page_texts[0] if page_texts else "")
@@ -162,27 +166,119 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
                 gross_amount = _money(pm.group(1))
         out.gross_amount = round(gross_amount if gross_amount is not None else row_gross, 2)
 
-        # --- comment-box fields (may span pages) ---
+        # --- comment-box fields ---
+        # The box is a free-text block on the LEFT of the affidavit page; the
+        # station contact column (ATTN: / Phone: / web address) is printed
+        # beside it, and extract_text() glues the two onto one line. Read the
+        # box by column, and let a field that wraps ("PRODUCT NCA" / "NEW CAR;")
+        # continue across lines. Fall back to the page text only when no box
+        # is found (older layouts, Crispin/MMI).
+        # The order number sits in the box (Davis Elen "Order 31899;") or in
+        # the header's Estimate field (Crispin/MMI "Order 212735, Est 0001").
         if m := re.search(r"Order\s*#:\s*(\d+)", full_text):
             out.rep_order_number = m.group(1).strip()
         elif m := re.search(r"\bOrder\s+(\d{4,})\b", full_text):
-            # Crispin/MMI: the affidavit Estimate field reads "Order 212735, Est 0001"
             out.rep_order_number = m.group(1).strip()
-        if m := re.search(r"CLIENT\s+(\w+)", full_text):
-            out.agency_ad_code = m.group(1).strip()
-        if m := re.search(r"PRODUCT\s+(\w+)\s+(.+?)(?:\s+http|\s+CPE\b|\n|$)", full_text):
-            out.agency_prod_code = m.group(1).strip()
-            out.product_name = m.group(2).strip().replace("-", " ").title()
-        if m := re.search(r"ESTIMATE\s+\d+\s+(\S+)", full_text):
-            out.comment_top = m.group(1).strip()
-        # HL-style: COMMENTS section — line after "ATTN:" before "Phone:" or URL
-        if m := re.search(r"COMMENTS\s+ATTN:.*?\n(.+?)\s+(?:Phone:|http)", full_text, re.DOTALL):
-            out.comment_bottom = m.group(1).strip()
+        if box_lines:
+            _read_comment_box(out, " ".join(box_lines))
+            out.comment_bottom = box_lines[0]
+        else:
+            _read_comment_box(out, full_text)
+            # HL-style: COMMENTS section — line after "ATTN:" before "Phone:" or URL
+            if m := re.search(
+                r"COMMENTS\s+ATTN:.*?\n(.+?)\s+(?:Phone:|http)", full_text, re.DOTALL
+            ):
+                out.comment_bottom = m.group(1).strip()
 
     except Exception as e:
         logger.warning("Affidavit parse failed for %s: %s", source or "<upload>", e)
         out.warnings.append(f"Affidavit parse failed: {e}")
     return out
+
+
+_CONTACT_COLUMN_WORDS = ("ATTN:", "Phone:")
+_BOX_ROW_TOL = 2.5  # pt: words within this of each other sit on one line
+_BOX_END_GAP = 20.0  # pt: a larger gap between lines ends the box
+
+
+def _comment_box_lines(pages) -> list[str]:
+    """
+    The affidavit's COMMENTS box as lines of text, read by column so the
+    station contact column printed beside it (ATTN: / Phone: / http…) never
+    bleeds in. Empty when no page carries a COMMENTS box.
+    """
+    for page in pages:
+        try:
+            words = page.extract_words()
+        except Exception:
+            continue
+        heads = [w for w in words if w["text"] == "COMMENTS"]
+        if not heads:
+            continue
+        head = heads[0]
+        same_row = [w for w in words if abs(w["top"] - head["top"]) <= _BOX_ROW_TOL]
+        contact = [w["x0"] for w in same_row if w["text"] in _CONTACT_COLUMN_WORDS]
+        cut = (min(contact) if contact else float(page.width)) - 1.0
+        body = sorted(
+            (w for w in words if w["top"] > head["top"] + _BOX_ROW_TOL and w["x0"] < cut),
+            key=lambda w: (w["top"], w["x0"]),
+        )
+        rows: list[list[dict]] = []
+        for w in body:
+            if rows and w["top"] - rows[-1][0]["top"] <= _BOX_ROW_TOL:
+                rows[-1].append(w)
+            elif rows and w["top"] - rows[-1][-1]["top"] > _BOX_END_GAP:
+                break
+            else:
+                rows.append([w])
+        return [" ".join(w["text"] for w in sorted(r, key=lambda w: w["x0"])) for r in rows]
+    return []
+
+
+def _read_comment_box(out: AffidavitData, text: str) -> None:
+    """
+    Fill the Davis Elen style comment fields (CLIENT / PRODUCT / ESTIMATE)
+    from `text`. A product name ends at ';', the next label, or
+    a contact-column token; it may be absent ("PRODUCT Multicultural").
+    """
+    if m := re.search(r"CLIENT\s+(\w+)", text):
+        out.agency_ad_code = m.group(1).strip()
+    if m := re.search(
+        r"PRODUCT\s+(\w+)[ \t]*([^\n;]*?)[ \t]*"
+        r"(?=;|\n|$|\s*\bESTIMATE\b|\s*\bCPE\b|\s*Phone:|\s*https?://)",
+        text,
+    ):
+        out.agency_prod_code = m.group(1).strip()
+        out.product_name = m.group(2).strip().replace("-", " ").title()
+    if m := re.search(r"ESTIMATE\s+\d+\s+(?!https?://|Phone:)([^\s;]+)", text):
+        out.comment_top = m.group(1).strip()
+
+
+def comment_overrides(a: AffidavitData) -> tuple[dict, list[str]]:
+    """
+    The comment-box values an affidavit contributes to the invoice form, and
+    a warning for each one that cannot fit its EDI field (it is NOT prefilled;
+    the template's value stands and the operator types a code if needed).
+    """
+    values: dict = {}
+    warnings: list[str] = []
+    for f_ in (
+        "rep_order_number",
+        "agency_ad_code",
+        "agency_prod_code",
+        "product_name",
+        "comment_top",
+        "comment_bottom",
+    ):
+        v = getattr(a, f_)
+        if not v:
+            continue
+        n = COMMENT_FIELD_WIDTH.get(f_)
+        if n and len(v) > n:
+            warnings.append(f"affidavit {f_} '{v}' is {len(v)} chars (max {n}) — not prefilled")
+            continue
+        values[f_] = v
+    return values, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -929,15 +1025,25 @@ def validate_invoice(template: dict, inv: dict, spots: list[dict]) -> list[dict]
     _maxlen(
         "advertiser_name", inv.get("advertiser_name") or template.get("advertiser_name", ""), 25
     )
-    _maxlen("product_name", inv.get("product_name") or template.get("product_name", ""), 25)
+    _maxlen(
+        "product_name",
+        inv.get("product_name") or template.get("product_name", ""),
+        COMMENT_FIELD_WIDTH["product_name"],
+    )
     _maxlen("agency_name", template.get("agency_name", ""), 25)
     _maxlen("representative", template.get("representative", ""), 25)
     _maxlen("salesperson", template.get("salesperson", ""), 25)
 
     # Codes
-    _maxlen("agency_ad_code", inv.get("agency_ad_code") or template.get("agency_ad_code", ""), 8)
     _maxlen(
-        "agency_prod_code", inv.get("agency_prod_code") or template.get("agency_prod_code", ""), 8
+        "agency_ad_code",
+        inv.get("agency_ad_code") or template.get("agency_ad_code", ""),
+        COMMENT_FIELD_WIDTH["agency_ad_code"],
+    )
+    _maxlen(
+        "agency_prod_code",
+        inv.get("agency_prod_code") or template.get("agency_prod_code", ""),
+        COMMENT_FIELD_WIDTH["agency_prod_code"],
     )
     if not (inv.get("agency_ad_code") or template.get("agency_ad_code")):
         warn("agency_ad_code", "empty — strongly recommended by the spec")

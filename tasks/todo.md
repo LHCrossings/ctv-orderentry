@@ -1168,3 +1168,17 @@ Jenna: `Phoenix_20261101_0700.mp4` flashes black in EDIUS too (she put it and th
 - [x] record.ps1: Read-LossEvents (wall time + last remux window per loss), Loss-Bursts / Segment-Pieces split at remux, 64 MB socket buffer; candidate syntax-checked + self-tested on VIDEO-02; tests/unit/test_video02_recorder_instream_loss.py
 - [x] DEPLOYED 19:17:23 PT 11/2 (Lee: "yes do them"; backup record.ps1.bak_20261102_191723); first remux under the new code clean (1913.ts); pieces archived to NAS 2026-11-01\ at 19:18-19:19 (0700 = clean head 109 MB, 0703 = rest); damaged original kept at test\Phoenix_20261101_0700_damaged.mp4; email draft tasks/emails/2026-11-02-jenna-phoenix-0700-pieces.md (Lee sends); team result on 10/30 `_0812` + the two pieces pending
 - [ ] after 2-3 loss lines in the recorder log: does "logged ~" sit inside/just after "last remux ... -HH:MM:SS"? then drop `+faststart` / throttle the archive copy, else it is Phoenix's side
+
+## EDI billing: product name reads "Http://Www.Crossingstv.Com" (2026-11-03)
+
+- [x] Cause: the affidavit's COMMENTS box sits beside the station contact column (ATTN / Phone / web
+      address); `extract_text()` glues them per line, and the old PRODUCT regex took whatever followed
+      the code when the name was absent (RPM `PRODUCT Multicultural`) or wrapped (Davis Elen
+      `PRODUCT NCA` / `NEW CAR;`) — 7 of 16 October affidavits.
+- [x] `_comment_box_lines` reads the box by column (words left of the ATTN:/Phone: x), wrapped fields
+      continue across lines; `_read_comment_box` stops a product name at `;`, the next label, or a
+      contact token; `comment_overrides` never prefills a value wider than its R31 field (warns instead).
+- [x] Fixtures `tests/fixtures/edi/2610-065_affidavit.pdf`, `2610-026_affidavit.pdf`; 4 tests; all 16
+      October affidavits swept clean (no contact tokens in any comment field).
+- [ ] Lee: RPM affidavits put a NAME on the CLIENT line (`CLIENT Thunder Valley…` → code `Thunder`
+      fits 8 chars and is prefilled, as before); say if the CLIENT/PRODUCT lines there should be codes.

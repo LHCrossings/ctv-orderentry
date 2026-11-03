@@ -29,6 +29,7 @@ from business_logic.services.edi_billing import (
 from business_logic.services.edi_billing import (
     all_templates,
     broadcast_month_range,
+    comment_overrides,
     commission_plan,
     diff_pdf_csv,
     estimate_from_customer_ref,
@@ -249,17 +250,9 @@ def _assemble_rows() -> list[dict]:
                 }
             )
         if a:
-            for f_ in (
-                "rep_order_number",
-                "agency_ad_code",
-                "agency_prod_code",
-                "product_name",
-                "comment_top",
-                "comment_bottom",
-            ):
-                v = getattr(a, f_)
-                if v:
-                    inv[f_] = v
+            values, width_warnings = comment_overrides(a)
+            inv.update(values)
+            row["warnings"].extend(width_warnings)
             if a.net_amount is not None:
                 # R34 commission = EDI gross − this net, so the EDI net equals our invoice
                 inv["net_cents"] = int(round(a.net_amount * 100))

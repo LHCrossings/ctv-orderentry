@@ -482,3 +482,100 @@ def test_agency_production_invoice_flag_y_and_affidavit_commission():
     assert [ln for ln in lines if ln.startswith("34;")][0].rstrip(
         ";"
     ) == "34;;244706;36706;208000;;;;;;;;1"
+
+
+# ---------------------------------------------------------------------------
+# Comment box read by column (Lee, 11/3: "Http://Www.Crossingstv.Com" as the
+# product name on seven October invoices). The station contact column
+# (ATTN: / Phone: / web address) is printed beside the COMMENTS box and
+# extract_text() glues the two onto one line.
+# ---------------------------------------------------------------------------
+
+_CONTACT_TOKENS = ("http", "Phone", "ATTN", "888-901")
+
+
+def _no_contact_bleed(a):
+    for f_ in (
+        "rep_order_number",
+        "agency_ad_code",
+        "agency_prod_code",
+        "product_name",
+        "comment_top",
+        "comment_bottom",
+    ):
+        v = getattr(a, f_)
+        assert not any(t.lower() in v.lower() for t in _CONTACT_TOKENS), (f_, v)
+
+
+def test_rpm_product_line_with_code_only_leaves_the_name_empty_2610_065(real_pdfplumber):
+    """'PRODUCT Multicultural' then the web address on the same extracted line."""
+    a = parse_affidavit((_FIXTURES / "2610-065_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.warnings == []
+    assert a.agency_prod_code == "Multicultural"
+    assert a.product_name == ""
+    assert a.agency_ad_code == "Muckleshoot"
+    assert a.comment_bottom == "CLIENT Muckleshoot Casino Resort"
+    _no_contact_bleed(a)
+    from src.business_logic.services.edi_billing import comment_overrides
+
+    values, warnings = comment_overrides(a)
+    assert "product_name" not in values
+    assert "agency_ad_code" not in values and "agency_prod_code" not in values
+    assert values["comment_bottom"] == "CLIENT Muckleshoot Casino Resort"
+    assert [w.split("'")[1] for w in warnings] == ["Muckleshoot", "Multicultural"]
+
+
+def test_davis_elen_product_name_wrapped_to_the_next_box_line_2610_026(real_pdfplumber):
+    """'PRODUCT NCA' + Phone on one line, 'NEW CAR; ESTIMATE 1500' + URL on the next."""
+    a = parse_affidavit((_FIXTURES / "2610-026_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.warnings == []
+    assert a.rep_order_number == "31899"
+    assert a.agency_ad_code == "DSCT"
+    assert a.agency_prod_code == "NCA"
+    assert a.product_name == "New Car"
+    assert a.comment_top == "26_10_10_T_NCA_MTV_AM_M"
+    assert a.comment_bottom.startswith("Order 31899; CLIENT DSCT SO. CAL. TDA; PRODUCT NCA")
+    _no_contact_bleed(a)
+
+
+def test_comment_box_fallback_on_glued_page_text_never_takes_the_contact_column():
+    from src.business_logic.services.edi_billing import AffidavitData, _read_comment_box
+
+    a = AffidavitData()
+    _read_comment_box(a, "PRODUCT Multicultural http://www.crossingstv.com\nESTIMATE /MC/11062")
+    assert (a.agency_prod_code, a.product_name) == ("Multicultural", "")
+
+    b = AffidavitData()
+    _read_comment_box(
+        b,
+        "CLIENT DSCT SO. CAL. TDA; PRODUCT NCA Phone: 888-901-5288\n"
+        "NEW CAR; ESTIMATE 1500 http://www.crossingstv.com\n26_10_10_T_NCA_MTV_AM_M;",
+    )
+    assert (b.agency_ad_code, b.agency_prod_code, b.product_name) == ("DSCT", "NCA", "")
+    assert b.comment_top == ""
+
+    c = AffidavitData()
+    _read_comment_box(
+        c,
+        "Order 32063\nCLIENT DCBU CAPITAL BUSINESS UNIT\nPRODUCT QSR QUICK SERVICE-RESTAURANT\nESTIMATE 73 26_10_11_T__MAN_AM_BEVS&FRIES\nCPE: DCBU/QSR/73",
+    )
+    assert (c.agency_prod_code, c.product_name) == ("QSR", "Quick Service Restaurant")
+    assert c.comment_top == "26_10_11_T__MAN_AM_BEVS&FRIES"
+
+
+def test_comment_overrides_never_prefills_a_value_wider_than_its_edi_field():
+    from src.business_logic.services.edi_billing import (
+        COMMENT_FIELD_WIDTH,
+        AffidavitData,
+        comment_overrides,
+    )
+
+    a = AffidavitData(
+        agency_ad_code="MCR",
+        agency_prod_code="Multicultural",
+        product_name="x" * (COMMENT_FIELD_WIDTH["product_name"] + 1),
+        comment_bottom="CLIENT Muckleshoot Casino Resort",
+    )
+    values, warnings = comment_overrides(a)
+    assert values == {"agency_ad_code": "MCR", "comment_bottom": "CLIENT Muckleshoot Casino Resort"}
+    assert len(warnings) == 2 and all("not prefilled" in w for w in warnings)
