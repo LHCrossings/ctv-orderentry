@@ -4,6 +4,45 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Fix Keyed on the EVENT That Was Seen (a Reconnect) Misses the Same DAMAGE From Another Cause — Key the Split on the Damage Itself, and Measure the Position of a Loss Before Naming Its Source
+
+**Session:** Lee, Jenna's "another file flashing black, the 7 AM file" (11/1 07:00) three days after the reconnect split (2026-11-02)
+
+**Rule:** The 10/30 fix split a recording at every RELAY EXIT, because the 0800 join was the
+only damage seen. 11/1 07:00 had no reconnect (no "relay exited" line 01:46-12:12) and zero
+SRT drops (relay log 69 bytes), yet the recorder's ffmpeg log carried 16 "Packet corrupt
+(stream = N, dts = D)" lines and the hour's AAC took the re-encode path; the decoder errors
+sit at 174.4 s and 178.9 s of the file and the 0.5 s keyframe cadence has holes 174.6-181.1 s
+= 07:02:54-07:03:00, the seconds the 0600 remux finished on the same single HDD. Same shape
+as the join (GOPs referencing pictures not in the file), different trigger; the split never
+fired. The recorder's log already named every such event with a source-clock dts; nobody
+read it. Two wrong turns on the way: decoding the mp4's AUDIO to place the damage (the mp4's
+AAC was re-encoded, so it is clean by construction; only the stream-copied video keeps the
+damage), and `@($sec, $sec + $wrap, $sec - $wrap)` in PowerShell (the comma binds tighter
+than + and -, so it is an array minus a number; the remote self-test caught it, the syntax
+check did not).
+
+**How to apply:**
+1. A guard against a damage shape keys on the DAMAGE (here: the demuxer's own "Packet
+   corrupt" lines), not on the one event that produced it last time. `Read-LossEvents`
+   collects every dropped packet's dts each loop; `Remux-Closed` cuts the segment into
+   pieces around each burst (`tests/unit/test_video02_recorder_instream_loss.py`).
+2. Place a loss in TIME before naming its cause: position in the file (showinfo pts before
+   the first "corrupt decoded frame", the keyframe-cadence holes) + the segment's start = a
+   wall time to put next to the logs of everything else that ran (remux end 07:02:59). One
+   data point at a 5%-of-the-hour position is a lead, not a verdict: the new loss line logs
+   the wall time and the last remux window so the next incidents decide it.
+3. To place damage, decode the track that was stream-COPIED; a re-encoded track has no
+   errors left to find. Kill the long full decode before starting a cheaper probe, or they
+   share one HDD and both crawl (the classifier refused the kill; 40 min lost).
+4. A piece cut from a `.ts` with `-noaccurate_seek -ss` opens on the IDR; the same cut from
+   an mp4 keeps discard-flagged pre-roll in front of it. Repair through a `.ts`, as the
+   recorder does.
+5. SRT latency is not a lever here: it is 8 s and the relay reports zero drops; a loss that
+   never entered SRT (or happened after it) cannot be recovered by waiting longer.
+
+---
+
 ## A Check That Rounds Each Row Before Adding Reports a Mismatch Excel Does Not Have — Sum the Way the Book Sums, and the Criterion Is the User's Sentence, Not Mine
 
 **Session:** Lee, billing book 2610 month-end check — "Wait. I think you are wrong … Crispin, if I highlight the lines for net on the cleaned tab, comes out to 5280.13. That's exactly what the affidavit shows" (2026-11-02)

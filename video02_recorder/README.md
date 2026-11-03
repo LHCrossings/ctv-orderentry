@@ -114,6 +114,35 @@ join with `-noaccurate_seek -ss <a little after the IDR dts>` (a plain `-ss` lan
 on the keyframe BEFORE the join and keeps the junk as discard-flagged pre-roll),
 and the pre-join part with `-to <dts of the last complete field>`.
 
+**A loss INSIDE the stream does the same, with no reconnect (11/1 07:00, Jenna).**
+`Phoenix_20261101_0700.mp4` is a full hour with no relay exit and zero SRT drops
+in the relay log, yet the recorder's demuxer dropped 16 torn packets over 6 s
+(`Packet corrupt (stream = N, dts = D)` lines in the recorder's ffmpeg log, PES
+size mismatches on video and audio): two corrupt frames at 174.4 s and 178.9 s of
+the file and keyframes missing from the 0.5 s cadence from 174.6 s to 181.1 s, i.e.
+07:02:54-07:03:00, the seconds the 0600 remux finished on the same hard disk. The
+loss sits upstream of the recorder's demuxer: in Phoenix's own path before SRT,
+or at the loopback socket between the relay and the recorder (a reader thread
+stalled by the top-of-hour disk work; unproven, one data point). Both are handled:
+the recorder's loopback input gets a 64 MB OS receive buffer (`buffer_size`), and
+every loss is recorded and cut around. `Read-LossEvents` (each loop) reads what the
+recorder's ffmpeg log gained and keeps each dropped packet's source-clock dts,
+logging `in-stream loss: N corrupt packet(s) ... logged ~HH:MM:SS; last remux
+<segment> HH:MM:SS-HH:MM:SS` (the wall time and the remux window are the data that
+settle where the loss happens on the next incidents). `Remux-Closed` matches the
+dts to the segment's own range (`Segment-Range`, the 33-bit PCR wrap tried both
+ways), clusters them into bursts 10 s apart (`Loss-Bursts`) and writes the segment
+as pieces (`Segment-Pieces`): the head ends on the last keyframe 0.5 s before the
+first dropped packet (`-to`), the next piece opens on the first keyframe 2 s after
+the last one (an input `-noaccurate_seek -ss` 0.3 s ahead of it; a stream copy
+from a `.ts` drops the non-key packets before the first keyframe, so the file
+opens exactly on the IDR; on an mp4 source the same seek keeps discard-flagged
+pre-roll instead), named for its own start minute like a reconnect segment
+(`Piece-Name`). A `-to` on a seeked piece is relative to the `-ss`. The `.ts` is
+deleted only when every piece was written. Hand repair of the 11/1 file went the
+same way (mp4 -> `.ts` -> two pieces, `C:\PhoenixSRT\test\Phoenix_20261101_0700_part1.mp4`
+174 s and `Phoenix_20261101_0703.mp4` 57 min, both decode clean around the cut).
+
 Local retention: 72 hours (three days, Lee 10/15 and again 10/16; the NAS keeps five), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
 

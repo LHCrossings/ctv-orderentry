@@ -49,6 +49,20 @@ $script:RemuxRetryAt = @{}   # segment name -> next remux attempt after an all-m
 # not in the file, then the first IDR; ffmpeg's decoder flagged every third frame "corrupt" for
 # the remaining 47 minutes and EDIUS showed black flashes from there to the end (Maija 10/30).
 $script:CutTail = @{}
+# In-stream loss (11/1 07:00, Jenna: black flashes in EDIUS in a file with NO reconnect): the
+# relay logged zero SRT drops, yet the recorder's demuxer dropped 16 torn packets over 6 s at
+# 07:02:54-07:03:00 (keyframes missing from the 0.5 s cadence for 174.6-181.1 s of the hour).
+# The GOPs around such a hole reference pictures that are not in the file, the same shape as
+# the 10/30 reconnect join. Every "Packet corrupt" line the recorder writes is collected with
+# its source-clock dts (Read-LossEvents, each loop) and the remux cuts the segment into pieces
+# around each burst (Loss-Bursts / Segment-Pieces): head to the last keyframe before the loss,
+# next piece from the first keyframe well after it, named for its own start minute like a
+# reconnect segment. The loss line also records the wall time and the last remux window, so
+# the next incidents show whether our own top-of-hour disk work is the cause.
+$script:Loss = New-Object System.Collections.ArrayList   # @{ stream; dts; seen } per dropped packet
+$script:LogPos = @{}                                      # recorder log path -> bytes already read
+$script:RecLog = $null                                    # the live recorder's ffmpeg log
+$script:LastRemux = $null                                 # @{ name; from; to } wall clock of the last remux
 
 function Log($msg) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $msg
@@ -79,13 +93,14 @@ function Start-Recorder {
     $args = @(
         "-hide_banner", "-loglevel", "warning", "-nostdin",
         "-fflags", "+discardcorrupt",   # a Phoenix reconnect joins the stream mid-frame; the continuity jump flags that torn PES corrupt and this drops it here instead of writing a broken AAC frame into the .ts (10/17)
-        "-i", "udp://127.0.0.1:${LoopPort}?fifo_size=1000000&overrun_nonfatal=1",
+        "-i", "udp://127.0.0.1:${LoopPort}?fifo_size=1000000&overrun_nonfatal=1&buffer_size=67108864",   # buffer_size = the OS socket receive buffer (64 MB = ~95 s of stream): the 11/1 07:00 loss (6 s of packets) landed at 07:02:54-07:03:00, the seconds the 0600 remux finished on the same disk; a stalled reader thread must not lose datagrams at the socket (11/2)
         "-map", "0", "-c", "copy",
         "-f", "segment", "-segment_time", "$SegSeconds", "-segment_atclocktime", "1",
         "-reset_timestamps", "1", "-strftime", "1", "-segment_format", "mpegts",
         $pattern
     )
     $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardError $ffLog
+    $script:RecLog = $ffLog
     Log "recorder started pid=$($p.Id) log=$ffLog"
     return $p
 }
@@ -119,6 +134,117 @@ function Last-KeyframeSeconds($tsPath) {
     return [double](($last -split ',')[0]) - $start
 }
 
+function Segment-Range($tsPath) {
+    # Source-clock start_time and duration (seconds) of a segment, as ffprobe reports them.
+    $fmt = & $FFprobe -v error -show_entries format=start_time,duration -of csv=p=0 $tsPath
+    if (-not $fmt) { return $null }
+    $parts = ($fmt -split ','); $start = 0.0; $dur = 0.0
+    if ($parts.Count -lt 2) { return $null }
+    [double]::TryParse($parts[0], [ref]$start) | Out-Null; [double]::TryParse($parts[1], [ref]$dur) | Out-Null
+    if ($dur -le 0) { return $null }
+    return @{ start = $start; dur = $dur }
+}
+
+function Keyframe-Near($tsPath, $range, $outSeconds, $direction) {
+    # OUTPUT-time position of the last video keyframe at or before $outSeconds ('before') or the
+    # first one at or after it ('after'), from a 6 s window of the segment around that point.
+    # Positions are dts (what -to compares on a stream copy), minus the input start_time.
+    $t = $range.start + $outSeconds
+    if ($direction -eq 'before') { $a = [Math]::Max($range.start, $t - 6); $b = $t } else { $a = $t; $b = $t + 6 }
+    $rows = & $FFprobe -v error -read_intervals ("{0:F3}%{1:F3}" -f $a, $b) -select_streams v:0 -show_entries packet=dts_time,flags -of csv=p=0 $tsPath
+    $keys = @($rows | Where-Object { $_ -match ',K' } | ForEach-Object { [double](($_ -split ',')[0]) })
+    if ($direction -eq 'before') {
+        $keys = @($keys | Where-Object { $_ -le $t }); if ($keys.Count -eq 0) { return $null }; return ($keys[-1] - $range.start)
+    }
+    $keys = @($keys | Where-Object { $_ -ge $t }); if ($keys.Count -eq 0) { return $null }; return ($keys[0] - $range.start)
+}
+
+function Read-LossEvents($ffLog) {
+    # The recorder drops every TS packet whose PES was torn (+discardcorrupt) and logs
+    # "Packet corrupt (stream = N, dts = D), dropping it." with D on the SOURCE clock (90 kHz).
+    # Read what the log gained since the last loop, keep each dts, and log the burst with the
+    # wall time it was written and the last remux window (the suspect for 11/1 07:02:54).
+    if (-not $ffLog -or -not (Test-Path $ffLog)) { return }
+    $item = Get-Item $ffLog
+    $len = $item.Length
+    $pos = if ($script:LogPos.ContainsKey($ffLog)) { $script:LogPos[$ffLog] } else { 0 }
+    if ($len -le $pos) { return }
+    $fs = New-Object IO.FileStream($ffLog, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try {
+        $fs.Seek($pos, [IO.SeekOrigin]::Begin) | Out-Null
+        $buf = New-Object byte[] ($len - $pos)
+        $n = $fs.Read($buf, 0, $buf.Length)
+    } finally { $fs.Close() }
+    $script:LogPos[$ffLog] = $pos + $n
+    $text = [Text.Encoding]::ASCII.GetString($buf, 0, $n)
+    $new = @()
+    foreach ($m in [regex]::Matches($text, 'Packet corrupt \(stream = (\d+), dts = (\d+)\)')) {
+        $e = @{ stream = [int]$m.Groups[1].Value; dts = [long]$m.Groups[2].Value; seen = (Get-Date) }
+        [void]$script:Loss.Add($e); $new += $e
+    }
+    if ($new.Count -gt 0) {
+        $v = @($new | Where-Object { $_.stream -eq 0 }).Count
+        $d = @($new | ForEach-Object { $_.dts } | Sort-Object)
+        $rm = if ($script:LastRemux) { "last remux {0} {1:HH:mm:ss}-{2:HH:mm:ss}" -f $script:LastRemux.name, $script:LastRemux.from, $script:LastRemux.to } else { "no remux yet" }
+        Log ("in-stream loss: {0} corrupt packet(s) dropped ({1} video), source dts {2}..{3} ({4:F1} s), logged ~{5:HH:mm:ss}; {6}" -f $new.Count, $v, $d[0], $d[-1], (($d[-1] - $d[0]) / 90000.0), $item.LastWriteTime, $rm)
+    }
+    # forget events older than 4 h: every segment that could carry them has been remuxed by then
+    $cut = (Get-Date).AddHours(-4)
+    for ($i = $script:Loss.Count - 1; $i -ge 0; $i--) { if ($script:Loss[$i].seen -lt $cut) { $script:Loss.RemoveAt($i) } }
+}
+
+function Loss-Bursts($range) {
+    # OUTPUT-time [from, to] of each loss burst inside the segment: the dropped packets whose
+    # source dts falls in the segment's range (the 33-bit PCR wrap, 26.5 h, is tried both ways),
+    # clustered with a 10 s gap.
+    $wrap = [Math]::Pow(2, 33) / 90000.0
+    $pts = @()
+    foreach ($e in $script:Loss) {
+        $sec = $e.dts / 90000.0
+        foreach ($cand in @($sec, ($sec + $wrap), ($sec - $wrap))) {
+            if ($cand -ge $range.start - 1 -and $cand -le $range.start + $range.dur + 1) { $pts += ($cand - $range.start) }
+        }
+    }
+    $pts = @($pts | Sort-Object)
+    $bursts = @()
+    foreach ($p in $pts) {
+        if ($bursts.Count -gt 0 -and ($p - $bursts[-1].to) -lt 10) { $bursts[-1].to = $p } else { $bursts += @{ from = $p; to = $p } }
+    }
+    return $bursts
+}
+
+function Segment-Pieces($tsPath, $range, $bursts) {
+    # The segment minus each burst, as @{ from; to } in OUTPUT seconds ($null = the segment's
+    # own start / end): a piece ends on the last keyframe 0.5 s before a burst's first dropped
+    # packet and the next one opens on the first keyframe 2 s after its last (11/1 07:00: the
+    # keyframe cadence had holes for 6.5 s after the first corrupt frame). Pieces under 2 s
+    # (a loss at the very start or end of the hour) are dropped.
+    $pieces = @(); $from = $null
+    foreach ($b in $bursts) {
+        $end = Keyframe-Near $tsPath $range ($b.from - 0.5) 'before'
+        $next = Keyframe-Near $tsPath $range ($b.to + 2.0) 'after'
+        if ($end -eq $null -or $next -eq $null) { Log ("{0}: no keyframe around the loss at {1:F1}-{2:F1} s; not split there" -f (Split-Path $tsPath -Leaf), $b.from, $b.to); continue }
+        $pieces += @{ from = $from; to = $end }
+        $from = $next
+    }
+    $pieces += @{ from = $from; to = $null }
+    return @($pieces | Where-Object {
+        $a = if ($_.from -eq $null) { 0.0 } else { $_.from }
+        $z = if ($_.to -eq $null) { $range.dur } else { $_.to }
+        ($z - $a) -ge 2
+    })
+}
+
+function Piece-Name($when) {
+    # A piece after a loss is named for its own start minute, like a reconnect segment; the next
+    # free minute if that name is taken (a HHMMSS name as the last resort, which the archive skips).
+    for ($i = 0; $i -lt 10; $i++) {
+        $n = "$RecDir\${Prefix}_" + $when.AddMinutes($i).ToString("yyyyMMdd_HHmm") + ".mp4"
+        if (-not (Test-Path $n) -and -not (Test-Path "$n.part")) { return $n }
+    }
+    return "$RecDir\${Prefix}_" + $when.ToString("yyyyMMdd_HHmmss") + ".mp4"
+}
+
 function Remux-Closed($recProc) {
     # A segment is closed when the muxer has opened a NEWER one, or the recorder is not
     # running. Never by elapsed time: on 10/15 every relay reconnect (16:36, 17:35, 20:34)
@@ -129,11 +255,10 @@ function Remux-Closed($recProc) {
     if (-not $all) { return }
     $live = if ($recProc -and -not $recProc.HasExited) { $all[-1].FullName } else { $null }
     foreach ($ts in $all | Where-Object { $_.FullName -ne $live }) {
-        $mp4 = [IO.Path]::ChangeExtension($ts.FullName, ".mp4")
-        $tmp = "$mp4.part"
         if ($ts.Length -lt 1MB) { Log "discard tiny segment $($ts.Name) ($($ts.Length) B)"; Remove-Item $ts.FullName -Force; continue }
         # A segment whose remux failed in every mode is retried once an hour, not every loop.
         if ($script:RemuxRetryAt.ContainsKey($ts.Name) -and (Get-Date) -lt $script:RemuxRetryAt[$ts.Name]) { continue }
+        $script:LastRemux = @{ name = $ts.Name; from = (Get-Date); to = (Get-Date) }
         # Like EDIT-02 Memory's export (Lee 10/15): video + ONE audio track and a tmcd timecode
         # track from the segment's start time (the .ts creation time, drop-frame).
         # Audio: the AAC track copied. When one ADTS frame is damaged the mp4 muxer refuses the
@@ -143,15 +268,22 @@ function Remux-Closed($recProc) {
         # 256k (~4 min per hour on this Xeon, mostly the 2.3 GB copy). NEVER the AC-3 track:
         # it is digital silence end to end (-91 dB measured 10/17 on three hours and the live
         # stream), which is why the 10/15 "ac3 copy" fallback produced Maija's silent hours.
-        $tc = $ts.CreationTime.ToString("HH:mm:ss") + ";00"
         # A segment that ended by a reconnect/restart is cut mid-field: end the mp4 just before
         # its last keyframe so every GOP in it is complete (loses < 0.5 s at a point where the
         # stream itself was down for 5-60 s). Hour-boundary segments end at a keyframe already.
-        $trim = @()
+        $tailTo = $null
         if ($script:CutTail.ContainsKey($ts.Name)) {
             $k = Last-KeyframeSeconds $ts.FullName
-            if ($k -ne $null -and $k -gt 1) { $trim = @("-to", ("{0:F3}" -f ($k - 0.001))); Log ("{0}: tail trimmed to {1:F3} s (last keyframe; segment ended by a reconnect/restart)" -f $ts.Name, $k) }
+            if ($k -ne $null -and $k -gt 1) { $tailTo = $k - 0.001; Log ("{0}: tail trimmed to {1:F3} s (last keyframe; segment ended by a reconnect/restart)" -f $ts.Name, $k) }
             else { Log "$($ts.Name): no keyframe found in the last 8 s; tail NOT trimmed" }
+        }
+        # A segment that carried an in-stream loss is written as pieces around each burst.
+        $range = Segment-Range $ts.FullName
+        $bursts = @(); if ($range) { $bursts = @(Loss-Bursts $range) }
+        $pieces = @(@{ from = $null; to = $null })
+        if ($bursts.Count -gt 0) {
+            $pieces = @(Segment-Pieces $ts.FullName $range $bursts)
+            Log ("{0}: {1} in-stream loss burst(s) at {2}; written as {3} piece(s)" -f $ts.Name, $bursts.Count, (($bursts | ForEach-Object { "{0:F1}-{1:F1} s" -f $_.from, $_.to }) -join ', '), $pieces.Count)
         }
         $streams = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n"
         $aac = $streams | Where-Object { $_ -match ',aac' } | Select-Object -First 1
@@ -164,28 +296,49 @@ function Remux-Closed($recProc) {
         } else {
             $modes += @{ label = "first audio -> aac (no AAC track found)"; pre = @("-err_detect", "ignore_err"); args = @("-map", "0:a:0?") + $enc }
         }
-        $ok = $false
-        foreach ($m in $modes) {
-            $ffArgs = @("-hide_banner", "-loglevel", "error", "-nostdin") + $m.pre + @("-i", $ts.FullName, "-map", "0:v:0") + $m.args + @("-c:v", "copy", "-timecode", $tc, "-movflags", "+faststart") + $trim + @("-f", "mp4", "-y", $tmp)
-            # Start-Process, never `&` + 2>&1: ffmpeg's stderr warnings would become PowerShell errors (thumb.ps1 lesson 10/16).
-            $errFile = "$LogDir\remux_last_stderr.txt"
-            $proc = Start-Process -FilePath $FFmpeg -ArgumentList $ffArgs -NoNewWindow -PassThru -Wait -RedirectStandardError $errFile
-            $code = $proc.ExitCode
-            if (Test-Path $errFile) { Add-Content "$LogDir\remux_errors.log" ("--- {0} {1} ---" -f $ts.Name, $m.label); Get-Content $errFile | Add-Content "$LogDir\remux_errors.log" }
-            if ($code -eq 0 -and (Test-Path $tmp)) {
-                $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
-                Move-Item $tmp $mp4 -Force
-                try { Remove-Item $ts.FullName -Force -ErrorAction Stop }
-                catch { Log "could not delete $($ts.Name) after remux: $($_.Exception.Message)" }
-                $script:RemuxRetryAt.Remove($ts.Name)
-                $script:CutTail.Remove($ts.Name)
-                Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label)
-                $ok = $true; break
+        $allOk = $true; $idx = 0
+        foreach ($pc in $pieces) {
+            $idx++
+            # A piece that does not start the segment is cut with an input -ss 0.3 s ahead of its
+            # opening keyframe (a stream copy drops the non-key packets before the first keyframe,
+            # so the video opens exactly on it); ffmpeg then shifts output time by that -ss, so a
+            # -to on such a piece is relative to the seek point, not to the segment.
+            $seek = 0.0; $pre = @()
+            if ($pc.from -ne $null) { $seek = [Math]::Max(0.0, $pc.from - 0.3); $pre = @("-noaccurate_seek", "-ss", ("{0:F3}" -f $seek)) }
+            $end = $pc.to
+            if ($end -eq $null) { $end = $tailTo }
+            $trim = @()
+            if ($end -ne $null) { $trim = @("-to", ("{0:F3}" -f ($end - $seek))) }
+            $pStart = $ts.CreationTime.AddSeconds($(if ($pc.from -eq $null) { 0.0 } else { $pc.from }))
+            $tc = $pStart.ToString("HH:mm:ss") + ";00"
+            $mp4 = if ($idx -eq 1) { [IO.Path]::ChangeExtension($ts.FullName, ".mp4") } else { Piece-Name $pStart }
+            $tmp = "$mp4.part"
+            $ok = $false
+            foreach ($m in $modes) {
+                $ffArgs = @("-hide_banner", "-loglevel", "error", "-nostdin") + $m.pre + $pre + @("-i", $ts.FullName, "-map", "0:v:0") + $m.args + @("-c:v", "copy", "-timecode", $tc, "-movflags", "+faststart") + $trim + @("-f", "mp4", "-y", $tmp)
+                # Start-Process, never `&` + 2>&1: ffmpeg's stderr warnings would become PowerShell errors (thumb.ps1 lesson 10/16).
+                $errFile = "$LogDir\remux_last_stderr.txt"
+                $proc = Start-Process -FilePath $FFmpeg -ArgumentList $ffArgs -NoNewWindow -PassThru -Wait -RedirectStandardError $errFile
+                $code = $proc.ExitCode
+                if (Test-Path $errFile) { Add-Content "$LogDir\remux_errors.log" ("--- {0} piece {1} {2} ---" -f $ts.Name, $idx, $m.label); Get-Content $errFile | Add-Content "$LogDir\remux_errors.log" }
+                if ($code -eq 0 -and (Test-Path $tmp)) {
+                    $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
+                    Move-Item $tmp $mp4 -Force
+                    Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4}{5})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label, $(if ($pieces.Count -gt 1) { ", piece $idx of $($pieces.Count)" } else { "" }))
+                    $ok = $true; break
+                }
+                Add-Content "$LogDir\remux_errors.log" ("--- {0} piece {1} {2}: exit {3} ---" -f $ts.Name, $idx, $m.label, $code)
+                if (Test-Path $tmp) { Remove-Item $tmp -Force }
             }
-            Add-Content "$LogDir\remux_errors.log" ("--- {0} {1}: exit {2} ---" -f $ts.Name, $m.label, $code)
-            if (Test-Path $tmp) { Remove-Item $tmp -Force }
+            if (-not $ok) { $allOk = $false; break }
         }
-        if (-not $ok) {
+        $script:LastRemux.to = (Get-Date)
+        if ($allOk) {
+            try { Remove-Item $ts.FullName -Force -ErrorAction Stop }
+            catch { Log "could not delete $($ts.Name) after remux: $($_.Exception.Message)" }
+            $script:RemuxRetryAt.Remove($ts.Name)
+            $script:CutTail.Remove($ts.Name)
+        } else {
             $script:RemuxRetryAt[$ts.Name] = (Get-Date).AddHours(1)
             Log "remux FAILED for $($ts.Name) in every audio mode; .ts kept, retry in 1 h (see remux_errors.log)"
         }
@@ -274,6 +427,7 @@ while ($true) {
             Stop-Proc $relayProc; Stop-Proc $recProc; Start-Sleep -Seconds 5
             $recProc = Start-Recorder; Start-Sleep -Seconds 2; $relayProc = Start-Relay; $lastSize = -1; $stall = 0
         }
+        Read-LossEvents $script:RecLog
         Remux-Closed $recProc
         Sweep
         Write-Status $relayProc $recProc

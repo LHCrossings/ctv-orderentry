@@ -1158,3 +1158,13 @@ checked cell for cell from the page image, SEA Vietnamese via the positional rea
 - [x] Script now also prints sub-cent Station Nets (Crispin +0.13, Sagent HQ +0.16, NKB +0.004) and tabs whose footer Net Amount Due ≠ Σ Station Net (ACM PROD footer −234, San Mateo PROD rows 0 vs footer 375)
 - [x] Lee removed the ACM PROD commission; ACM's 6 items vs CLEANED's 3 market rows is BY DESIGN (client sees items, we spread by market) → script matches a wholly-unmatched tab to CLEANED rows of the same contract when the net agrees
 - [x] Lee fixed San Mateo PROD ($375 on row + CLEANED) and the ACM PROD footer; rerun OK (CLEANED 215,533.81); sent to Katherine. Crispin/Sagent sub-cent nets are NOT an issue: affidavit net == CLEANED net is the only criterion
+
+## Phoenix black flashes, second file: in-stream loss without a reconnect (2026-11-02)
+
+Jenna: `Phoenix_20261101_0700.mp4` flashes black in EDIUS too (she put it and the 10/30 0800 on the V drive root).
+- [x] 11/1 07:00 had NO reconnect (01:46-12:12 session), relay log zero SRT drops; recorder ffmpeg log: 16 `Packet corrupt` lines, AAC re-encoded
+- [x] damage placed: corrupt frames 174.4 s / 178.9 s, keyframe cadence holes 174.6-181.1 s = 07:02:54-07:03:00 = the 0600 remux end (07:02:59) on the same HDD
+- [x] repaired pieces on VIDEO-02 `C:\PhoenixSRT\test\`: `Phoenix_20261101_0700_part1.mp4` (174 s) + `Phoenix_20261101_0703.mp4` (57 min), cut through a .ts, decode clean around the cut
+- [x] record.ps1: Read-LossEvents (wall time + last remux window per loss), Loss-Bursts / Segment-Pieces split at remux, 64 MB socket buffer; candidate syntax-checked + self-tested on VIDEO-02; tests/unit/test_video02_recorder_instream_loss.py
+- [ ] Lee: deploy (SSM here-string swap + task restart) — NOT deployed; placing the two pieces on the NAS for Jenna/Maija; team result on 10/30 `_0812` still pending
+- [ ] after 2-3 loss lines in the recorder log: does "logged ~" sit inside/just after "last remux ... -HH:MM:SS"? then drop `+faststart` / throttle the archive copy, else it is Phoenix's side
