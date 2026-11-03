@@ -125,7 +125,7 @@ class TimeAdvertisingLine:
                 return w.rate
         return 0.0
 
-    def get_etere_lines(self) -> list:
+    def get_etere_lines(self, today: Optional[datetime] = None) -> list:
         """
         Convert weekly day-spot data to Etere line specifications.
 
@@ -147,7 +147,9 @@ class TimeAdvertisingLine:
                            per_day_max, spots_per_week, rate
         """
         _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
-        today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        # `today` is injectable so tests pin the plan to a date; the 10/31 tests read the real
+        # clock and failed on 11/03 once the IO's first week (Mon 11/02) was in the past.
+        today_dt = (today or datetime.today()).replace(hour=0, minute=0, second=0, microsecond=0)
         n = len(self.weeks)
         starts = [datetime.strptime(w.week_start, "%m/%d/%Y") for w in self.weeks]
 

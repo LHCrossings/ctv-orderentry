@@ -10,6 +10,7 @@ carries its own GROSS TOTAL, so they are their own oracles.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -129,11 +130,16 @@ def test_nov2026_spaced_gross_total_parses(ta_parser, name, market, gross):
     assert sum(ln.rate * ln.total_spots for ln in order.lines) == gross
 
 
-def _plan(order):
+# The plan trims a first week that is already in the past to its first spot day (real clock),
+# so every plan assertion pins `today` to the day the IOs were received.
+_RECEIVED = datetime(2026, 10, 31)
+
+
+def _plan(order, today=_RECEIVED):
     return [
         (sp["days"], sp["start_date"], sp["end_date"], sp["total_spots"], sp["per_day_max"])
         for ln in order.lines
-        for sp in ln.get_etere_lines()
+        for sp in ln.get_etere_lines(today=today)
     ]
 
 
@@ -151,7 +157,7 @@ def test_nov2026_thu_1x_fri_2x_splits_into_per_count_lines(ta_parser):
     ]
     assert [
         (sp["days"], sp["start_date"], sp["end_date"], sp["total_spots"], sp["per_day_max"])
-        for sp in cant.get_etere_lines()
+        for sp in cant.get_etere_lines(today=_RECEIVED)
     ] == [
         ("R", "11/02/2026", "11/05/2026", 1, 1),
         ("F", "11/02/2026", "11/27/2026", 8, 2),
@@ -161,22 +167,39 @@ def test_nov2026_thu_1x_fri_2x_splits_into_per_count_lines(ta_parser):
     assert _plan(order)[3:4] == [("RF", "11/02/2026", "11/27/2026", 8, 1)]
 
 
-@pytest.mark.parametrize("name", ["graton_sep2026_cvc.pdf", "graton_nov2026_sfo.pdf"])
-def test_every_block_is_placeable_and_holds_every_ordered_spot(ta_parser, name):
-    """Invariant: a block's spots == per-day max × its days × its weeks, and
-    the blocks of a row sum to the row's ordered spots."""
-    from datetime import datetime, timedelta
+def test_a_first_week_in_the_past_starts_on_its_first_spot_day(ta_parser):
+    """Entered after the Monday: the block opens on its first spot day of that week and keeps
+    every spot (the scheduler rejects a start in the past); later weeks are untouched. This is
+    the shape that broke the 10/31 tests on 11/03, when they read the real clock."""
+    order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / "graton_nov2026_cvc.pdf"))
+    assert _plan(order, today=datetime(2026, 11, 3))[:3] == [
+        ("R", "11/05/2026", "11/05/2026", 1, 1),
+        ("F", "11/06/2026", "11/27/2026", 8, 2),
+        ("WR", "11/09/2026", "11/26/2026", 6, 1),
+    ]
+    assert _plan(order, today=datetime(2026, 11, 3))[3:4] == [
+        ("RF", "11/05/2026", "11/27/2026", 8, 1)
+    ]
 
+
+@pytest.mark.parametrize("name", ["graton_sep2026_cvc.pdf", "graton_nov2026_sfo.pdf"])
+@pytest.mark.parametrize("today", [_RECEIVED, datetime(2026, 11, 3), datetime(2026, 11, 7)])
+def test_every_block_is_placeable_and_holds_every_ordered_spot(ta_parser, name, today):
+    """Invariant: a block's spots == per-day max × its days × its weeks, and
+    the blocks of a row sum to the row's ordered spots, whatever day it is entered."""
     order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / name))
     for ln in order.lines:
-        specs = ln.get_etere_lines()
+        specs = ln.get_etere_lines(today=today)
         assert sum(sp["total_spots"] for sp in specs) == ln.total_spots
         for sp in specs:
             d0 = datetime.strptime(sp["start_date"], "%m/%d/%Y")
             d1 = datetime.strptime(sp["end_date"], "%m/%d/%Y")
-            weeks = (d1 - d0 + timedelta(days=6)).days // 7 + (0 if (d1 - d0).days % 7 < 6 else 0)
-            slots = sp["per_day_max"] * len(sp["days"]) * max(weeks, 1)
-            assert sp["total_spots"] <= slots, (name, ln.program, sp)
+            # start = the week's Monday or (trimmed) its first spot day, end = the last spot
+            # day of the last week, so the span is under a week per week: Fri 11/06 -> Fri
+            # 11/27 is 21 days and FOUR Fridays (the old `+6 // 7` counted three).
+            weeks = (d1 - d0).days // 7 + 1
+            slots = sp["per_day_max"] * len(sp["days"]) * weeks
+            assert sp["total_spots"] <= slots, (name, ln.program, today, sp)
 
 
 def test_sep2026_plans_unchanged_by_the_per_count_split(ta_parser):
