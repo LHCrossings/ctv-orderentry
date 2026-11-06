@@ -3532,3 +3532,21 @@ per-frame timestamps, then the 1-vs-6-thread control.
    because the mov demuxer logs its whole index; cut a few seconds to annexb and parse the slice
    headers (first_mb, frame_num, field/bottom, idr_pic_id, poc) yourself — 28 slices per field,
    a truncated field shows as fewer.
+
+## An Admerasia IO's Market Is the `DMA:` Line — the File Name Is a Label, Not a Field
+
+**Session:** Lee, McDonald's APA Next Q4 IOs — "DMA Seattle means it's the seattle market, regardless of filename" (2026-11-06)
+
+**Rule:** I flagged the Chinese IO because its file name said "Crossings TV" with no market while
+the sheet said `DMA: Seattle`, and asked Lee to check it at the market prompt. The DMA field is
+the document's own statement of the market; the file name is whatever the buyer typed. The
+parser already reads the market from the DMA line only, so the flag was noise that cost Lee a
+reply. Same family as 10/28 ("when the document names the market, it becomes the default: a
+stated value, not an inference") and 9/28 ("file names and row labels disagree; the sheet is
+the truth").
+
+**How to apply:**
+1. A value the document states in a labelled field is settled; do not raise it as a question
+   because a file name, email subject or folder name differs.
+2. Flag a market only when the DOCUMENT is silent or self-contradictory (two DMA values, a
+   DMA that maps to no station), never on metadata outside the document.
