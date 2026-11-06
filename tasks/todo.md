@@ -1212,3 +1212,19 @@ December's not yet; "I need to make spot numbers and names"; SD section always i
 - [ ] Lee: ingest the 18 November spots under the proposed names, then drop the six sheets on
       /traffic/assign-assets and Assign (December periods stay "pending library" until the Dec spots land)
 - [ ] IW: ask whether the NYC ES rows (877H/878H) are November (file names say CY26-NOV)
+
+## Crispin / BAAQMD Winter 2026 IO — net-printed rates (2026-11-06)
+
+Lee: order 00216085 (est 0002, KQTA, 11/23/26-2/28/27) prints every rate as `N120.00` =
+Mediaocean's "Net 120 per spot"; bonus spots still to be added by the agency, NOT to be entered
+until the IO is corrected.
+
+- [x] PDF reader: `N…` money → NET rate + `rates_are_net`; mixed N/gross refuses; totals
+      reconciled at Mediaocean's per-spot gross (15%, cents); 4-week February regime no longer
+      folded into November (month/day header threshold 5 → 2); `Transaltion Services` is a charge
+- [x] Automation: net IO grosses up at entry with the ANAGRAF commission (`gross_rate`, fee
+      prompted with the ANAGRAF default); production box grossed the same way; gross IO unchanged
+- [x] Fixture `tests/fixtures/crispin/crispin_io_216085_net.pdf`; 11 tests
+- [x] Rehearsed plan (no write): 4 lines → 5 Etere lines, 158 spots, $20,565.22 airtime +
+      $2,941.18 production = $23,506.40 = the IO's KQTA TOT
+- [ ] Wait for the corrected IO with bonus lines; re-run the gather; Lee enters

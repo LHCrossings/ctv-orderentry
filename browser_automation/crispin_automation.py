@@ -14,13 +14,17 @@ client/agency carries is what the header gets. That single rule is what makes
 the two source formats safe to mix, because they quote money differently:
 
   - the proposal workbook quotes **net** (the Discounted Rate we sold at);
-  - the official Brand Time Schedule IO quotes **gross** (net ÷ 0.85).
+  - the official Brand Time Schedule IO quotes **gross** (net ÷ 0.85) — or, from
+    November 2026, Mediaocean's `N120.00` = **net $120 per spot** (Lee 11/6: "just
+    one way Mediaocean writes Net 100 per spot").
 
-Rates enter verbatim from whichever document we read, and the ANAGRAF commission
-nets them back down. So if an IO's rates look grossed-up, the fix is the ANAGRAF
-commission, never a multiplier in this file. (Lee set Crispin to 15% on
-2026-08-10 for exactly this reason; it had been 0% while we only had the net-rate
-proposal.)
+A gross-printed document enters verbatim and the ANAGRAF commission nets it back
+down. A net-printed one (`order.rates_are_net`) is grossed up at entry with the
+commission ANAGRAF links to the client (`gross_rate`, the iwcca/gauger pattern:
+net / (1 - fee), cents), so Etere stores 141.18 for N120 and bills $120 net; the
+backwrite gets the NET rate + rates_are_net through parser_bridge and grosses at
+full precision. The commission itself is never overridden here — if an IO's
+money looks wrong, the fix is ANAGRAF (Lee set Crispin to 15% on 2026-08-10).
 
 One Etere contract for the whole order (single market, SFO). Paid :30s News
 lines keep their explicit dayparts; :15s bonus lines are ROS (booking code 10)
@@ -130,6 +134,40 @@ def _tokens(s: str) -> set[str]:
     return {t for t in re.split(r"[^a-z0-9]+", (s or "").lower()) if t}
 
 
+def gross_rate(net: float, fee_pct: float) -> float:
+    """Net per-spot rate → the gross Etere stores (rounded to cents, intertrend rule)."""
+    if not net:
+        return 0.0
+    return round(float(net) / (1.0 - fee_pct / 100.0), 2)
+
+
+def entry_rate(order: CrispinOrder, net_or_gross: float, fee_pct: float) -> float:
+    """What a line's IMPORTO (or a charge's amount) is at entry: the printed figure
+    for a gross IO, the gross-up of it for an 'N…' net IO."""
+    return gross_rate(net_or_gross, fee_pct) if order.rates_are_net else float(net_or_gross)
+
+
+def _anagraf_fee(customer_id: int) -> Optional[float]:
+    """The commission ANAGRAF links to the client's agency, or None when unreadable."""
+    try:
+        from browser_automation.etere_direct_client import connect
+
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT ISNULL(a.Commissione, 0)
+               FROM ANAGRAF c LEFT JOIN ANAGRAF a ON a.ID_ANAGRAF = c.AGENZIA
+               WHERE c.ID_ANAGRAF = %s""",
+            (int(customer_id),),
+        )
+        row = cur.fetchone()
+        conn.close()
+        return float(row[0] or 0.0) if row else None
+    except Exception as exc:
+        print(f"[CUSTOMER] ANAGRAF commission lookup failed: {exc}")
+        return None
+
+
 def _confirm_start_date(order: CrispinOrder) -> Optional[date]:
     """Ask what date the order should actually start when the IO is late."""
     return _confirm_start_date_impl(order.flight_start, order.flight_end)
@@ -206,16 +244,22 @@ def gather_crispin_inputs(source_path: str) -> Optional[dict]:
         if ln.is_bonus:
             ros = CRISPIN_ROS_WINDOWS.get(ln.base_language, {})
             days, time = ros.get('days', 'M-Su'), ros.get('time', 'ROS')
-        rate = f"${ln.rate:.2f}" if ln.rate else "  bonus"
+        if not ln.rate:
+            rate = "  bonus"
+        elif order.rates_are_net:
+            rate = f"N${ln.rate:.2f}"
+        else:
+            rate = f"${ln.rate:.2f}"
         flight = (f"  {_fmt_mmddyyyy(ln.date_from)}–{_fmt_mmddyyyy(ln.date_to)}"
                   if ln.date_from and ln.date_to else "")
         print(f"    {tag} :{ln.length_sec}s {ln.language_block:<26} {days} {time:<11} "
               f"{rate:>8}  {ln.total_spots} spots{flight}")
 
     paid_total = sum(ln.rate * ln.total_spots for ln in order.paid_lines)
+    basis = "net — grossed up at entry with the ANAGRAF commission" if order.rates_are_net else "as printed"
     print(f"\n  Airtime: {sum(ln.total_spots for ln in order.paid_lines)} paid + "
           f"{sum(ln.total_spots for ln in order.bonus_lines)} bonus spots"
-          f"   ${paid_total:,.2f}")
+          f"   ${paid_total:,.2f} ({basis})")
 
     # ── Production / non-airtime money ──
     # Goes in the line form's Production box, NOT a line of its own — backwrite
@@ -279,6 +323,28 @@ def gather_crispin_inputs(source_path: str) -> Optional[dict]:
         return None
     customer_id = int(customer_id)
 
+    # ── Net-printed IO ('N120.00'): gross up at entry with the ANAGRAF commission ──
+    fee_pct = 0.0
+    if order.rates_are_net:
+        fee_anag = _anagraf_fee(customer_id)
+        fee_default = fee_anag if fee_anag is not None else 15.0
+        print(f"\n  The IO prints NET rates (Mediaocean 'N…'); ANAGRAF commission for "
+              f"customer {customer_id}: {fee_default:g}%")
+        raw = input(f"  Agency commission % for the gross-up [{fee_default:g}]: ").strip()
+        try:
+            fee_pct = float(raw) if raw and raw.lower() not in ('y', 'yes') else float(fee_default)
+        except ValueError:
+            print("  ✗ Commission must be a number — aborting")
+            return None
+        if not 0 <= fee_pct < 100:
+            print("  ✗ Commission out of range — aborting")
+            return None
+        shown = sorted({ln.rate for ln in order.paid_lines})
+        print("  Gross at entry: " + ", ".join(
+            f"N${r:.2f} → ${gross_rate(r, fee_pct):.2f}" for r in shown))
+        for ch in order.charges:
+            print(f"  Production:     N${ch.amount:,.2f} → ${gross_rate(ch.amount, fee_pct):,.2f}")
+
     # ── Separation (customer DB default, else industry standard) ──
     separation = (15, 0, 0)
     billing_type = 'agency'   # Crispin is an agency; no commission attached
@@ -306,6 +372,7 @@ def gather_crispin_inputs(source_path: str) -> Optional[dict]:
         'contract_code':       contract_code,
         'description':         description,
         'start_date_override': _fmt_mmddyyyy(start_override),
+        'fee_pct':             fee_pct,
     }
     if order.order_number:
         est = f", Est {order.estimate}" if order.estimate else ""
@@ -383,7 +450,12 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
         # to accept a production line yet, and a zero-spot carrier line would
         # show up there as airtime. Etere turns the box into a CONTRATTISPESE
         # charge named 'Production', dated that line's flight start.
-        production_pending = round(sum(ch.amount for ch in order.charges), 2)
+        fee_pct = float(inputs.get('fee_pct') or 0.0)
+        if order.rates_are_net and not fee_pct:
+            raise RuntimeError("net-printed IO but no commission for the gross-up — "
+                               "gather_crispin_inputs must supply fee_pct")
+        production_pending = round(
+            sum(entry_rate(order, ch.amount, fee_pct) for ch in order.charges), 2)
 
         line_count = 0
         # Same planner the gather preview printed — the start-date override, the
@@ -400,13 +472,15 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
             for rng in ranges:
                 total_spots = rng['spots_per_week'] * rng['weeks']
                 date_from, date_to = rng['date_from'], rng['date_to']
+                rate = entry_rate(order, ln.rate, fee_pct)
 
                 line_count += 1
                 tag = f"  ← {rng['tag']}" if rng['tag'] else ""
                 print(f"  [LINE {line_count}] {order.market_code} {desc}: "
                       f"{_fmt_mmddyyyy(date_from)}–{_fmt_mmddyyyy(date_to)} "
                       f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots}) "
-                      f":{ln.length_sec}s rate={ln.rate} "
+                      f":{ln.length_sec}s rate={rate}"
+                      f"{f' (net {ln.rate})' if order.rates_are_net else ''} "
                       f"max {rng['max_daily']}/day{tag}")
                 # Carried by the first PAID line so the charge sits on billable
                 # airtime, then zeroed so it is written exactly once.
@@ -418,7 +492,7 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
                     days=days,
                     time_range=time_range,
                     description=desc,
-                    rate=ln.rate,
+                    rate=rate,
                     total_spots=total_spots,
                     spots_per_week=rng['spots_per_week'],
                     max_daily_run=rng['max_daily'],

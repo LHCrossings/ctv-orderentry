@@ -19,9 +19,15 @@ TWO source formats, one `CrispinOrder` shape — use `parse_crispin(path)`:
    Proposal rates are NET (no commission was attached when we quoted).
 
 2. **Official IO** (.pdf) — `parse_crispin_pdf`. A "Brand Time Schedule", the
-   same agency-system layout Daviselen and Intertrend send. Rates here are
-   **GROSS** (net ÷ 0.85) and the ANAGRAF agency commission nets them back down,
-   so they enter verbatim — see `crispin_automation` for the money discipline.
+   same agency-system layout Daviselen and Intertrend send. The August 2026 IO
+   printed **GROSS** rates (net ÷ 0.85) that enter verbatim and the ANAGRAF
+   agency commission nets back down. The November 2026 IO (order 216085)
+   prints them Mediaocean's other way, `N120.00` = **net $120 per spot** (Lee
+   11/6): the line keeps the NET rate, `rates_are_net` is True, and
+   `crispin_automation` grosses up at entry with the ANAGRAF commission (the
+   iwcca/gauger pattern) while the backwrite gets the net rate. The IO's own
+   PTS/DOLS totals are gross at Mediaocean's per-spot cents rounding, so the
+   reconciliation grosses the net rate the same way before comparing.
 
    Structural traps this reader exists to survive (all live in the 8/10/26 IO):
    - A long flight is split into **column regimes** of ~13 weeks each. Every
@@ -623,10 +629,33 @@ _DAYS_NORMAL = {
 # when it also names a recognisable non-airtime cost; anything else raises,
 # because silently entering it either way would be wrong.
 _CHARGE_RE = re.compile(
-    r"\b(TRANSLATION|PRODUCTION|DUBBING|DUB|VOICE\s*-?\s*OVER|VOICEOVER|TALENT"
-    r"|POST|EDIT|CAPTION|SUBTITL\w*|FEE|COST|CHARGE)\b",
+    r"\b(TRANSA?L?A?TION|PRODUCTION|DUBBING|DUB|VOICE\s*-?\s*OVER|VOICEOVER|TALENT"
+    r"|POST|EDIT|CAPTION|SUBTITL\w*|FEE|COST|CHARGE|SERVICES?)\b",
     re.IGNORECASE,
 )
+
+# Mediaocean prints a net-quoted IO's money as 'N120.00' and its PTS/DOLS totals
+# as the per-spot GROSS at the agency's standard commission, rounded to cents
+# (120 → 141.18, 2500 → 2941.18 on order 216085). This is the DOCUMENT's own
+# arithmetic, used only to reconcile the sheet against itself; the commission
+# that enters Etere comes from ANAGRAF in crispin_automation.
+_MEDIAOCEAN_GROSS_PCT = Decimal("15")
+
+
+def _io_gross(net: Decimal) -> Decimal:
+    """Net per-spot → the gross Mediaocean prints in its totals (cents, half-up)."""
+    from decimal import ROUND_HALF_UP
+
+    return (net / (Decimal(1) - _MEDIAOCEAN_GROSS_PCT / Decimal(100))).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
+def _pdf_money(text: str) -> Tuple[Optional[Decimal], bool]:
+    """'141.18' → (141.18, False); 'N120.00' → (120.00, True) — Mediaocean's net marker."""
+    raw = (text or "").strip()
+    is_net = bool(re.fullmatch(r"N[\d,]+\.\d+", raw, re.IGNORECASE))
+    return _pdf_num(raw[1:] if is_net else raw), is_net
 
 
 def _pdf_num(text: str) -> Optional[Decimal]:
@@ -784,6 +813,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     grid_order: List[str] = []
     summaries: List[dict] = []  # per-regime PTS/WEEK reconciliation rows
     grand: Optional[dict] = None
+    net_flags: List[Tuple[str, bool]] = []  # (LINE#, printed with the 'N' net marker?)
 
     for pi, (rows, _) in enumerate(pages):
         pending_months: Optional[List[dict]] = None
@@ -811,8 +841,10 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                         bands[lb] = (x - _BAND_PAD, nxt - _BAND_PAD)
 
             # -- month row of a column regime --
+            # A regime can be as short as the four February weeks of order 216085,
+            # so two month tokens are enough; the day row must match them 1:1.
             months = [w for w in words if w["x0"] >= _GRID_X_MIN and w["text"].upper() in _MONTHS]
-            if len(months) >= 5:
+            if len(months) >= 2:
                 pending_months = months
                 # The month row may also BE the row above the main header; the day
                 # numbers arrive on the next row either way.
@@ -826,7 +858,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 and re.fullmatch(r"\d{1,2}", w["text"])
                 and (tot_x0 is None or w["x0"] < tot_x0 - _COL_TOL)
             ]
-            if pending_months and len(days_hdr) >= 5:
+            if pending_months and len(days_hdr) >= 2:
                 if len(days_hdr) != len(pending_months):
                     raise ValueError(
                         f"Crispin PDF p{pi + 1}: {len(pending_months)} month headers but "
@@ -880,22 +912,24 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                         out[best[1]] = int(val)
                 return out
 
-            def tail(ws: List[dict]) -> Tuple[Optional[int], Optional[Decimal]]:
-                """(TOT, money) — the two right-hand columns. Money is the value
-                carrying a decimal point, so a shifted right margin can't swap them."""
+            def tail(ws: List[dict]) -> Tuple[Optional[int], Optional[Decimal], bool]:
+                """(TOT, money, net?) — the two right-hand columns. Money is the value
+                carrying a decimal point, so a shifted right margin can't swap them;
+                an 'N' in front of it is Mediaocean's net marker."""
                 spots = money = None
+                is_net = False
                 for w in ws:
                     if tot_x0 is None or w["x0"] < tot_x0 - _COL_TOL:
                         continue
-                    val = _pdf_num(w["text"])
+                    val, net = _pdf_money(w["text"])
                     if val is None:
                         continue
                     if "." in w["text"]:
                         if money is None:
-                            money = val
+                            money, is_net = val, net
                     elif spots is None:
                         spots = int(val)
-                return spots, money
+                return spots, money, is_net
 
             def regime_for(page: int, y: float) -> dict:
                 for reg in reversed(regimes):
@@ -910,7 +944,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
             prog = _band_text(words, *bands["PROGRAM"])
             if station_code and prog.split()[:1] == [station_code]:
                 rest = prog.split()[1:]
-                spots, money = tail(words)
+                spots, money, _ = tail(words)
                 if rest[:1] == ["TOT"]:
                     grand = {"spots": spots, "money": money}
                 else:
@@ -932,7 +966,8 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 continue
 
             reg = regime_for(pi, top)
-            spots, money = tail(words)
+            spots, money, is_net = tail(words)
+            net_flags.append((line_no, is_net))
             if spots is None or money is None:
                 raise ValueError(
                     f"Crispin PDF p{pi + 1} line {line_no}: could not read the TOT/COST "
@@ -1005,6 +1040,20 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     if not grid:
         raise ValueError("Crispin PDF: no schedule lines found")
 
+    # ── Net or gross: every money cell must say the same thing ───────────────
+    net_lines = sorted({no for no, f in net_flags if f})
+    gross_lines = sorted({no for no, f in net_flags if not f})
+    if net_lines and gross_lines:
+        raise ValueError(
+            f"Crispin PDF: lines {net_lines} print NET money ('N…') and lines "
+            f"{gross_lines} print gross — one IO cannot mix them; refusing to enter."
+        )
+    rates_are_net = bool(net_lines)
+
+    def money_rate(rec: dict) -> Decimal:
+        """The per-spot figure the IO's own totals are built from."""
+        return _io_gross(rec["rate"]) if rates_are_net else rec["rate"]
+
     # ── Reconcile against the IO's own arithmetic BEFORE trusting anything ───
     for no in grid_order:
         rec = grid[no]
@@ -1032,12 +1081,18 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 f"but the summary says {s['spots']}."
             )
         got_money = sum(
-            rec["rate"] * sum(rec["cells"].get(d, 0) for d in s["weeks"]) for rec in grid.values()
+            money_rate(rec) * sum(rec["cells"].get(d, 0) for d in s["weeks"])
+            for rec in grid.values()
         )
         if s["money"] is not None and abs(got_money - s["money"]) > Decimal("0.01"):
             raise ValueError(
                 f"Crispin PDF summary {s['label']}: lines total ${got_money} but the "
-                f"summary says ${s['money']}."
+                f"summary says ${s['money']}"
+                + (
+                    f" (net rates grossed at {_MEDIAOCEAN_GROSS_PCT}% per spot for the check)."
+                    if rates_are_net
+                    else "."
+                )
             )
 
     if grand:
@@ -1047,7 +1102,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 f"Crispin PDF: {got_spots} spots parsed but '{station_code} TOT' says "
                 f"{grand['spots']} — a line was dropped; refusing to enter."
             )
-        got_money = sum(rec["rate"] * rec["stated_total"] for rec in grid.values())
+        got_money = sum(money_rate(rec) * rec["stated_total"] for rec in grid.values())
         if grand["money"] is not None and abs(got_money - grand["money"]) > Decimal("0.01"):
             raise ValueError(
                 f"Crispin PDF: parsed total ${got_money} but '{station_code} TOT' says "
@@ -1146,9 +1201,10 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
         market_label=market_label,
         order_date=None,
         lines=lines,
-        # The IO quotes GROSS rates (net ÷ 0.85); the ANAGRAF agency commission
-        # nets them back down, so no gross-up is owed downstream.
-        rates_are_net=False,
+        # A gross-printed IO enters verbatim and the ANAGRAF commission nets it
+        # down; an 'N…' IO keeps NET rates here and the automation grosses up at
+        # entry (the backwrite reads this flag and grosses at full precision).
+        rates_are_net=rates_are_net,
         source_path=path,
         charges=charges,
         source_format="pdf",
