@@ -663,6 +663,7 @@
         <div id="admerasiaGrid" style="display:none; margin-top:14px;"></div>
         <div id="tcaaGrid" style="display:none; margin-top:14px;"></div>
         <div id="daviselenGrid" style="display:none; margin-top:14px;"></div>
+        <div id="opadGrid"      style="display:none; margin-top:14px;"></div>
         <div id="hlGrid"        style="display:none; margin-top:14px;"></div>
         <div id="tatariGrid" style="display:none; margin-top:14px;"></div>
 
@@ -1439,6 +1440,9 @@
         const grid = document.getElementById('daviselenGrid');
         grid.style.display = 'none';
         grid.innerHTML     = '';
+        const oGrid = document.getElementById('opadGrid');
+        oGrid.style.display = 'none';
+        oGrid.innerHTML     = '';
         const tGrid = document.getElementById('tcaaGrid');
         tGrid.style.display = 'none';
         tGrid.innerHTML     = '';
@@ -1484,6 +1488,7 @@
 
             // Route by format — mixed uploads are allowed; each item declares its own format
             const daviselen = items.filter(i => i.format === 'daviselen');
+            const opad      = items.filter(i => i.format === 'opad' && !i.error);
             const lexus     = items.filter(i => i.format === 'lexus');
             const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd' || i.format === 'trafinst');
             const hl        = items.filter(i => i.format === 'hl' || i.format === 'rpm');
@@ -1497,6 +1502,10 @@
             if (daviselen.length) {
                 window.daviselenResults = daviselen;
                 renderDaviselenGrid(daviselen);
+            }
+            if (opad.length) {
+                window.opadResults = opad;
+                renderOpadGrid(opad);
             }
             if (hl.length) {
                 window.hlResults = hl;
@@ -1712,6 +1721,141 @@
                 const data = await resp.json();
                 totalLines += data.lines_updated || 0;
                 totalSpots += data.spots_updated || 0;
+            }
+
+            if (errors.length) {
+                toast.style.color = 'var(--nord11)';
+                toast.textContent = errors.join(' | ');
+            } else {
+                toast.style.color = 'var(--nord14)';
+                toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
+            }
+        } catch (e) {
+            toast.style.color  = 'var(--nord11)';
+            toast.textContent  = `Error: ${e.message}`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Assign All';
+        }
+    }
+
+    // ── opAD Media (NYSDOH / NYSOH) traffic memo ──────────────────────────────
+    // One sheet = one estimate, one creative language, one flight, one ISCI table
+    // per spot length. The contract is found by the estimate (whole number, in the
+    // code or CUSTOMERREF); every line of that length with spots inside the flight
+    // gets the length's creatives — the sheet's language names the creative, and the
+    // line's own catalog language is printed so nothing is assigned out of sight.
+    function renderOpadGrid(results) {
+        const grid = document.getElementById('opadGrid');
+
+        const groupReady = g => g.spots.length && g.spots.every(s => s.found) && g.lines.length;
+        const allReady = results.every(r =>
+            !r.error && r.contract && r.groups.length && r.groups.every(groupReady)
+        );
+
+        const rows = [];
+        for (const r of results) {
+            const cands = r.contract_candidates || [];
+            const contractCell = r.contract
+                ? `<span style="color:var(--nord14);">${esc(r.contract.code)}</span><br>
+                   <span style="font-size:0.78rem;color:var(--text-muted);">#${r.contract.id} · ${r.contract.date_start}–${r.contract.date_end}</span>`
+                : cands.length
+                    ? `<span style="color:var(--nord11);">${cands.length} contracts carry estimate ${esc(r.estimate)} — pick by hand</span><br>
+                       <span style="font-size:0.78rem;color:var(--text-muted);">${cands.map(c => `${esc(c.code)} #${c.id}`).join('<br>')}</span>`
+                    : `<span style="color:var(--nord11);">No contract carries estimate ${esc(r.estimate)}</span>`;
+            const periodCell = `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> –
+                                <span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`;
+
+            r.groups.forEach((g, gi) => {
+                const spotsCell = g.spots.map(s => {
+                    const icon = s.found ? '✓' : '✗';
+                    const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
+                    return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> ${esc(s.title)} <span style="color:var(--text-muted);">${s.rotation_pct}%</span>`;
+                }).join('<br>');
+                const spotTotal = g.lines.reduce((a, l) => a + l.spot_count, 0);
+                const doneTotal = g.lines.reduce((a, l) => a + l.assigned_count, 0);
+                const langs = [...new Set(g.lines.map(l => l.lang || '?'))].join(', ');
+                const linesCell = g.lines.length
+                    ? `${g.lines.length} line${g.lines.length !== 1 ? 's' : ''}, ${spotTotal} spot${spotTotal !== 1 ? 's' : ''}
+                       <span style="color:var(--text-muted);">(${doneTotal} already on these creatives)</span><br>
+                       <span style="font-size:0.78rem;color:var(--text-muted);">line language: ${esc(langs)}</span>`
+                    : `<span style="color:var(--nord11);">No :${g.duration_sec} lines with spots in the flight</span>`;
+                rows.push(`<tr>
+                    ${gi === 0 ? `<td rowspan="${r.groups.length}" style="font-size:0.8rem;color:var(--text-muted);vertical-align:top;">${esc(r.filename)}</td>
+                    <td rowspan="${r.groups.length}" style="vertical-align:top;"><strong>${esc(r.estimate)}</strong><br><span style="font-size:0.78rem;color:var(--text-muted);">${esc(r.advertiser)}<br>${esc(r.language)}</span></td>
+                    <td rowspan="${r.groups.length}" style="vertical-align:top;">${contractCell}</td>
+                    <td rowspan="${r.groups.length}" style="vertical-align:top;">${periodCell}</td>` : ''}
+                    <td style="white-space:nowrap;">:${g.duration_sec}</td>
+                    <td>${spotsCell}</td>
+                    <td>${linesCell}</td>
+                </tr>`);
+            });
+        }
+
+        grid.innerHTML = `
+            <div class="tool-card" style="margin-bottom:0;">
+                <h2>Traffic Instructions — opAD</h2>
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead>
+                        <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">File</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Estimate</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Contract</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Flight</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Length</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Spot</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Lines in Flight</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows.join('')}</tbody>
+                </table>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                    <button class="run-btn apply" onclick="applyOpadTraffic()"
+                            ${allReady ? '' : 'disabled title="Resolve the contract, every ISCI and every length first"'}>
+                        Assign All
+                    </button>
+                    <span id="opadToast" style="font-size:0.85rem;"></span>
+                </div>
+            </div>`;
+        grid.style.display = 'block';
+    }
+
+    async function applyOpadTraffic() {
+        const results = window.opadResults || [];
+        const toast   = document.getElementById('opadToast');
+        const btn     = document.getElementById('opadGrid').querySelector('.run-btn.apply');
+        btn.disabled    = true;
+        btn.textContent = 'Assigning…';
+        toast.textContent = '';
+        toast.style.color = '';
+
+        let totalLines = 0, totalSpots = 0, errors = [];
+
+        try {
+            for (const r of results) {
+                if (!r.contract) continue;
+                for (const g of r.groups) {
+                    const foundSpots = g.spots.filter(s => s.found);
+                    if (!g.lines.length || !foundSpots.length) continue;
+                    const payload = {
+                        assignments: g.lines.map(l => ({ line_id: l.line_id, filmati_ids: buildRotationList(foundSpots) })),
+                        date_from: r.date_from_sql,
+                        date_to:   r.date_to_sql,
+                    };
+                    const resp = await fetch(`/api/traffic/contract/${r.contract.id}/auto-assign`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify(payload),
+                    });
+                    if (!resp.ok) {
+                        const detail = (await resp.json()).detail || 'Unknown error';
+                        errors.push(`Est ${r.estimate} :${g.duration_sec}: ${detail}`);
+                        continue;
+                    }
+                    const data = await resp.json();
+                    totalLines += data.lines_updated || 0;
+                    totalSpots += data.spots_updated || 0;
+                }
             }
 
             if (errors.length) {

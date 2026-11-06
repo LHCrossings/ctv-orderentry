@@ -183,21 +183,24 @@ def estimate_matches(estimate: str, *texts: Optional[str]) -> bool:
     return any(pat.search(t) for t in texts if t)
 
 
-def pick_contract(candidates: list, estimate: str) -> tuple:
+def pick_contract(candidates: list, estimate: str, agency_id: int = DAVISELEN_AGENCY_ID) -> tuple:
     """Filter substring candidates down to whole-token matches and choose one.
 
-    ``candidates`` are dicts with ``code``, ``description`` and (optionally)
-    ``agency_id``. Returns ``(chosen, matches)``: ``chosen`` is set only when the
-    choice is unambiguous — exactly one token match, or exactly one token match
-    that belongs to Davis Elen. Anything else returns ``None`` so the operator
-    picks; the tool never guesses a contract.
+    ``candidates`` are dicts with ``code``, ``description``, optionally
+    ``customer_ref`` (CONTRATTITESTATA.CUSTOMERREF, where opAD keeps the estimate)
+    and ``agency_id``. Returns ``(chosen, matches)``: ``chosen`` is set only when
+    the choice is unambiguous — exactly one token match, or exactly one token
+    match that belongs to ``agency_id`` (Davis Elen by default). Anything else
+    returns ``None`` so the operator picks; the tool never guesses a contract.
     """
     matches = [
-        c for c in candidates if estimate_matches(estimate, c.get("code"), c.get("description"))
+        c
+        for c in candidates
+        if estimate_matches(estimate, c.get("code"), c.get("description"), c.get("customer_ref"))
     ]
     if len(matches) == 1:
         return matches[0], matches
-    agency = [c for c in matches if c.get("agency_id") == DAVISELEN_AGENCY_ID]
+    agency = [c for c in matches if c.get("agency_id") == agency_id]
     if len(agency) == 1:
         return agency[0], matches
     return None, matches

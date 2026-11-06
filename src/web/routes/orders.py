@@ -9452,6 +9452,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         for f in files:
             parsed_files.append((f.filename, await f.read()))
 
+        from browser_automation.parsers.opad_traffic_parser import (
+            is_opad_traffic_text as _is_opad,
+        )
         from browser_automation.parsers.trafinst_traffic_parser import (
             is_trafinst_text as _is_trafinst,
         )
@@ -9464,6 +9467,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return "lexus"
             if "TRAFFIC INSTRUCTIONS" in upper and "tatari" in text.lower():
                 return "tatari"
+            if _is_opad(text):  # opAD Media memo: EST# + ***LANGUAGE*** + per-length tables
+                return "opad"
             if _is_trafinst(text):  # agency sheet: layout markers, any From: agency
                 return "trafinst"
             if "marketing architects" in text.lower():
@@ -9633,6 +9638,145 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "spots": spots_out,
                                 "not_found": not_found,
                                 "lines": line_ids,
+                            }
+                        )
+
+                    elif fmt == "opad":
+                        from browser_automation.parsers.opad_traffic_parser import (
+                            OPAD_AGENCY_ID,
+                            parse_opad_traffic_pdf,
+                        )
+
+                        try:
+                            instr = parse_opad_traffic_pdf(pdf_bytes)
+                        except ValueError as exc:
+                            # No EST#, no flight, no ISCI rows, rotations that do not
+                            # add to 100%: a layout change, never a card that assigns
+                            # against a guess.
+                            items.append(
+                                {"filename": filename, "format": "opad", "error": str(exc)}
+                            )
+                            continue
+
+                        # opAD keeps the estimate in the contract's CUSTOMERREF (Lee's
+                        # `opAD NYDOH <est>` convention also carries it in the code);
+                        # the LIKE is a prefilter, pick_contract keeps whole-number
+                        # matches and refuses to guess between two.
+                        term = f"%{instr.estimate}%"
+                        cur.execute(
+                            """
+                            SELECT TOP 20
+                                ct.ID_CONTRATTITESTATA AS id,
+                                ct.COD_CONTRATTO       AS code,
+                                ct.DESCRIZIONE         AS description,
+                                ct.CUSTOMERREF         AS customer_ref,
+                                ct.AGENZIA             AS agency_id,
+                                CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                                CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                            FROM CONTRATTITESTATA ct
+                            WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                               OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                               OR ct.CUSTOMERREF          LIKE %s
+                            ORDER BY ct.DATA_INIZIO DESC
+                        """,
+                            (term, term, term),
+                        )
+                        chosen, contracts = pick_contract(
+                            [dict(r) for r in cur.fetchall()],
+                            instr.estimate,
+                            agency_id=OPAD_AGENCY_ID,
+                        )
+                        contract_id = chosen["id"] if chosen else None
+
+                        isci_codes = sorted({s.isci for s in instr.spots})
+                        placeholders = ",".join(f"'{c}'" for c in isci_codes)
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        filmati_map = {
+                            r["COD_PROGRA"]: {
+                                "filmati_id": r["ID_FILMATI"],
+                                "db_title": r["DESCRIZIO"] or "",
+                            }
+                            for r in cur.fetchall()
+                        }
+
+                        # One group per spot length. The sheet names ONE creative
+                        # language and every NYS creative is Mandarin, so every line of
+                        # that length inside the flight gets it (Lee's hand convention;
+                        # the card prints each line's catalog language so a Cantonese
+                        # line is visible, never silent).
+                        groups_out = []
+                        for dur in instr.durations:
+                            spots_out = []
+                            for sp in instr.spots_for(dur):
+                                found = sp.isci in filmati_map
+                                spots_out.append(
+                                    {
+                                        "isci": sp.isci,
+                                        "title": filmati_map[sp.isci]["db_title"] if found else "",
+                                        "rotation_pct": sp.rotation_pct,
+                                        "filmati_id": (
+                                            filmati_map[sp.isci]["filmati_id"] if found else None
+                                        ),
+                                        "found": found,
+                                    }
+                                )
+                            found_ids = [s["filmati_id"] for s in spots_out if s["found"]]
+                            lines_out = []
+                            if contract_id:
+                                fid_list = ",".join(str(f) for f in found_ids) or "-1"
+                                cur.execute(f"""
+                                    SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                           cr.DESCRIZIONE       AS description,
+                                           ll.LANG              AS lang,
+                                           ISNULL(sc.spot_count, 0)     AS spot_count,
+                                           ISNULL(sc.assigned_count, 0) AS assigned_count
+                                    FROM CONTRATTIRIGHE cr
+                                    LEFT JOIN CTV_LineLanguage ll
+                                           ON ll.ID_CONTRATTIRIGHE = cr.ID_CONTRATTIRIGHE
+                                    LEFT JOIN (
+                                        SELECT tpa.id_contrattirighe,
+                                               COUNT(*) AS spot_count,
+                                               SUM(CASE WHEN tp.ID_FILMATI IN ({fid_list})
+                                                        THEN 1 ELSE 0 END) AS assigned_count
+                                        FROM trafficPalinse tpa
+                                        JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                        WHERE tp.DATA >= '{instr.date_from_sql}'
+                                          AND tp.DATA <= '{instr.date_to_sql}'
+                                        GROUP BY tpa.id_contrattirighe
+                                    ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                                      AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
+                                          = {dur}
+                                      AND ISNULL(sc.spot_count, 0) > 0
+                                    ORDER BY cr.ID_CONTRATTIRIGHE
+                                """)
+                                lines_out = [dict(r) for r in cur.fetchall()]
+                            groups_out.append(
+                                {
+                                    "duration_sec": dur,
+                                    "spots": spots_out,
+                                    "not_found": [s["isci"] for s in spots_out if not s["found"]],
+                                    "lines": lines_out,
+                                }
+                            )
+
+                        items.append(
+                            {
+                                "filename": filename,
+                                "format": "opad",
+                                "estimate": instr.estimate,
+                                "advertiser": instr.advertiser,
+                                "language": instr.language,
+                                "language_code": instr.language_code,
+                                "date_range": f"{instr.start_date}–{instr.end_date}",
+                                "date_from_sql": instr.date_from_sql,
+                                "date_to_sql": instr.date_to_sql,
+                                "contract": chosen,
+                                "contract_candidates": contracts,
+                                "groups": groups_out,
                             }
                         )
 

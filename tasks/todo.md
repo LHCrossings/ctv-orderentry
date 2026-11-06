@@ -1182,3 +1182,14 @@ Jenna: `Phoenix_20261101_0700.mp4` flashes black in EDIUS too (she put it and th
       October affidavits swept clean (no contact tokens in any comment field).
 - [ ] Lee: RPM affidavits put a NAME on the CLIENT line (`CLIENT Thunder Valley…` → code `Thunder`
       fits 8 chars and is prefilled, as before); say if the CLIENT/PRODUCT lines there should be codes.
+
+## opAD traffic card (2026-11-06)
+
+- [x] Parser `browser_automation/parsers/opad_traffic_parser.py` (EST#, ***LANGUAGE***, FROM/TO, one table per length; refuses on missing fields / rotations ≠ 100%)
+- [x] Route: `_detect_format` → `opad`; branch in `/api/traffic/parse-instructions` (contract by whole-token estimate incl. CUSTOMERREF, lines per length with spot + already-assigned counts in the flight)
+- [x] Card `renderOpadGrid` / `applyOpadTraffic` → `/auto-assign` per length with the flight window
+- [x] `pick_contract(agency_id=)` + customer_ref match (Daviselen default unchanged)
+- [x] Fixture + tests `tests/unit/test_opad_traffic_parser.py`
+- [x] Rehearsed through the FastAPI test client on 3178: 16 lines / 86 spots, all already on the sheet's creatives (Lee's 11/5 hand run) → first live run is a visible no-op
+
+Review: banner language = the creative (every NYS creative is Mandarin); the card prints each line's catalog language instead of filtering by it. First real use = the 11/30+ sheets.
