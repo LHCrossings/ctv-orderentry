@@ -94,11 +94,11 @@ def main():
             nxt = args.next_serial
     rows = propose_names(spots, existing, nxt)
 
-    print(f"next serial {nxt}; {len(rows)} ISCIs ({sum(r.existing for r in rows)} already in the library)")
-    print(f"{'serial':>6}  {'code':<14} {'dur':>4}  description")
+    # Lee's paste format (11/6): one line per spot, `<description> (<ISCI>)`.
+    print(f"# next serial {nxt}; {len(rows)} ISCIs ({sum(r.existing for r in rows)} already in the library)")
     for r in rows:
         flag = "  [exists]" if r.existing else (f"  [{r.note}]" if r.note else "")
-        print(f"{(r.serial or ''):>6}  {r.code:<14} :{r.duration_sec:<3}  {r.description}{flag}")
+        print(f"{r.description} ({r.code}){flag}")
     for s in skipped:
         print(f"  skipped (not an IW delivery name): {s}")
     if args.csv:
