@@ -401,11 +401,11 @@ def get_campaign_yymm_range(order: AdmerasiaOrder) -> str:
     """
     start, end = order.get_flight_dates()
     period = _extract_campaign_period(order.header_text or "")
-    m = re.match(r'\s*(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})', period)
+    m = re.match(r'\s*(\d{1,2}/\d{1,2}/\d{2,4})\s*-\s*(\d{1,2}/\d{1,2}/\d{2,4})', period)
     if m:
         try:
-            start = datetime.strptime(m.group(1), '%m/%d/%Y').date()
-            end = datetime.strptime(m.group(2), '%m/%d/%Y').date()
+            start = _parse_mdy(m.group(1))
+            end = _parse_mdy(m.group(2))
         except ValueError:
             pass
     first = f"{start.year % 100:02d}{start.month:02d}"
@@ -876,12 +876,28 @@ def _extract_order_number(text: str) -> str:
     return "Unknown"
 
 
+def _parse_mdy(date_str: str) -> date:
+    """``M/D/YYYY`` or ``M/D/YY`` → date.
+
+    Admerasia printed four-digit years on every IO until the 11/5/2026 McDonald's
+    APA Next orders, whose ``Order Date: 11/5/26`` crashed the gather on all three
+    files. A buyer can flip the year format between months (the Lexus traffic sheets
+    did on 9/26), so both shapes are read; anything else raises with the text.
+    """
+    date_str = date_str.strip()
+    for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Admerasia IO: cannot read date '{date_str}'")
+
+
 def _extract_order_date(text: str) -> date:
     """Extract order date from text."""
     match = re.search(r'Order Date:\s*(\d+/\d+/\d+)', text, re.IGNORECASE)
     if match:
-        date_str = match.group(1)
-        return datetime.strptime(date_str, '%m/%d/%Y').date()
+        return _parse_mdy(match.group(1))
     return date.today()
 
 
@@ -923,8 +939,8 @@ def _calculate_week_starts(campaign_period: str) -> List[date]:
     start_str = match.group(1)
     end_str = match.group(2)
     
-    start_date = datetime.strptime(start_str, '%m/%d/%Y').date()
-    end_date = datetime.strptime(end_str, '%m/%d/%Y').date()
+    start_date = _parse_mdy(start_str)
+    end_date = _parse_mdy(end_str)
     
     # Generate week starts
     week_starts = []
