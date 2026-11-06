@@ -34,7 +34,9 @@ def _spots_from_inputs(paths):
                 instr = parse_lexus_traffic_pdf(f.read_bytes())
                 for period in instr.periods:
                     for s in period.spots:
-                        d = parse_delivery_name(f"{s.isci}_{s.title}", sheet_language=s.language)
+                        d = parse_delivery_name(
+                            f"{s.isci}_{s.title}", sheet_language=s.language, market=instr.market_code
+                        )
                         if d is None:
                             skipped.append(f"{f.name}: {s.isci} {s.title}")
                             continue

@@ -2,8 +2,8 @@
 
 Lee 11/6: the November 2026 batch (18 .mov files) had to be numbered and named by hand
 each month; serial = model + title + month + agency tag, the :15/:30 and language cuts
-share it, and the -NY/-SF suffix appears only when the same spot name exists in more
-than one version. Existing assets are never renamed.
+share it, and a market suffix (-SE/-SF) appears only when one serial has a different ISCI
+per market for the same cut. Existing assets are never renamed.
 """
 
 import sys
@@ -78,21 +78,24 @@ def test_title_words():
     assert title_words("Invite_PS1") == "Invite PS1"
 
 
-def test_november_batch_numbers_by_title_and_tag_and_suffixes_only_twins():
+def test_november_batch_numbers_by_title_and_tag_with_no_market_suffix():
     rows = propose_names(_nov(), {}, 312)
     desc = {r.isci: r.description for r in rows}
     assert len(rows) == 18 and all(not r.existing for r in rows)
     # one serial per (model, title, month, tag); :15/:30 and M/V cuts share it
-    assert desc["TYIW26TL929H"] == "LEXUS30E314-NY: MY26 RX Over the Years Nov LEA-4"
-    assert desc["TYIW26TL930H"] == "LEXUS15E314-NY: MY26 RX Over the Years Nov LEA-4"
-    assert desc["TYIW26TL937H"] == "LEXUS30E316-SF: MY26 RX Over the Years Nov LWA-6"
-    assert desc["TYIW26TL931H"] == "LEXUS30M318-SF: MY26 RX Over the Years Nov LWA-7"
-    assert desc["TYIW26TL935H"] == "LEXUS30V318-SF: MY26 RX Over the Years Nov LWA-7"
-    assert desc["TYIW26TL936H"] == "LEXUS15V318-SF: MY26 RX Over the Years Nov LWA-7"
-    # the ES cut exists under one tag only → no suffix (Lee 11/6)
+    assert desc["TYIW26TL929H"] == "LEXUS30E314: MY26 RX Over the Years Nov LEA-4"
+    assert desc["TYIW26TL930H"] == "LEXUS15E314: MY26 RX Over the Years Nov LEA-4"
+    assert desc["TYIW26TL937H"] == "LEXUS30E316: MY26 RX Over the Years Nov LWA-6"
+    assert desc["TYIW26TL931H"] == "LEXUS30M318: MY26 RX Over the Years Nov LWA-7"
+    assert desc["TYIW26TL935H"] == "LEXUS30V318: MY26 RX Over the Years Nov LWA-7"
+    assert desc["TYIW26TL936H"] == "LEXUS15V318: MY26 RX Over the Years Nov LWA-7"
     assert desc["TYIW26TL877H"] == "LEXUS30E312: MY27 ES Childs Eyes Nov LEA-4"
     assert desc["TYIW26TL878H"] == "LEXUS15E312: MY27 ES Childs Eyes Nov LEA-4"
     assert sorted({r.serial for r in rows}) == [312, 313, 314, 315, 316, 317, 318]
+    # SEA and SFO share every western file, so no name needs a market suffix (Lee 11/6)
+    assert not any(
+        "-SE" in r.description or "-SF" in r.description or "-NY" in r.description for r in rows
+    )
     assert all(r.code == r.isci for r in rows)
 
 
@@ -109,7 +112,7 @@ def test_existing_isci_is_never_renamed_and_pins_its_groups_serial():
     assert (
         by["TYIW26TL929H"].existing and by["TYIW26TL929H"].description == existing["TYIW26TL929H"]
     )
-    assert by["TYIW26TL930H"].description == "LEXUS15E312-NY: MY26 RX Over the Years Nov LEA-4"
+    assert by["TYIW26TL930H"].description == "LEXUS15E312: MY26 RX Over the Years Nov LEA-4"
     new_serials = sorted({r.serial for r in rows if not r.existing and r.serial != 312})
     assert new_serials[0] == 320 and len(new_serials) == 6
 
@@ -136,3 +139,31 @@ def test_next_lexus_serial():
         next_lexus_serial(["LEXUS15E311-NY: x", "LEXUS30V307-SF: y", "PACO30E12: z", None]) == 312
     )
     assert next_lexus_serial([]) == 1
+
+
+def test_one_serial_with_a_cut_per_market_gets_se_and_sf():
+    """Lee 11/6: 'if spot number 277 has exactly the same title but there is a different
+    ISCI for SEA and one for SFO, we keep 277 and add suffix SE or SF'."""
+    sea = parse_delivery_name(
+        "TYIW26TL937H_MY26-RX_TV_OVER-THE-YEARS_ENG_CY26-NOV_23_07_LWA-6", "Hinglish", market="SEA"
+    )
+    sfo = parse_delivery_name(
+        "TYIW26TL940H_MY26-RX_TV_OVER-THE-YEARS_ENG_CY26-NOV_23_07_LWA-6", "Hinglish", market="SFO"
+    )
+    sea15 = parse_delivery_name(
+        "TYIW26TL938H_MY26-RX_TV_OVER-THE-YEARS_ENG_CY26-NOV_08_07_LWA-6", "Hinglish", market="SEA"
+    )
+    rows = {r.isci: r for r in propose_names([sea, sfo, sea15], {}, 277)}
+    assert rows["TYIW26TL937H"].description == "LEXUS30E277-SE: MY26 RX Over the Years Nov LWA-6"
+    assert rows["TYIW26TL940H"].description == "LEXUS30E277-SF: MY26 RX Over the Years Nov LWA-6"
+    # the :15 has one ISCI, so it shares the serial with no suffix
+    assert rows["TYIW26TL938H"].description == "LEXUS15E277: MY26 RX Over the Years Nov LWA-6"
+    # the same file on both sheets is one spot, not two versions
+    both = propose_names([sea, parse_delivery_name(sea.source, "Hinglish", market="SFO")], {}, 277)
+    assert [r.description for r in both] == ["LEXUS30E277: MY26 RX Over the Years Nov LWA-6"]
+    # from .mov names alone the market is unknown: same serial, flagged for Lee
+    a = parse_delivery_name("TYIW26TL937H_MY26-RX_TV_OVER-THE-YEARS_ENG_CY26-NOV_23_07_LWA-6.mov")
+    b = parse_delivery_name("TYIW26TL940H_MY26-RX_TV_OVER-THE-YEARS_ENG_CY26-NOV_23_07_LWA-6.mov")
+    flagged = propose_names([a, b], {}, 277)
+    assert {r.serial for r in flagged} == {277}
+    assert all("add the market suffix" in r.note for r in flagged)

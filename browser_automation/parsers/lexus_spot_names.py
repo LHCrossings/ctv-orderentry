@@ -3,15 +3,18 @@ Propose Etere spot names for a batch of IW Group (Lexus) deliveries.
 
 Lee's naming rule (2026-10-13, refined 2026-11-06):
 
-  description = LEXUS<dur><lang><serial>[-NY|-SF]: MY<yy> <model> <Title> <Mon> <tag>
+  description = LEXUS<dur><lang><serial>: MY<yy> <model> <Title> <Mon> <tag>
   code        = the ISCI from the delivered file name
 
 * Serial = (model year, model, title, month, agency tag). Under one tag the :15, the :30
   and every language cut share the serial; the LEA-n and LWA-n versions of one title are
   different serials; a title repeated next month is a new serial (never reuse a serial
   for a different ISCI).
-* Suffix only when the same spot name exists in more than one version (another tag) in
-  the batch: LEA → -NY, LWA → -SF. A lone spot that is not market specific gets none.
+* Market suffix (-SE, -SF, -NY) ONLY when one serial has two ISCIs for the same cut, one
+  per market — "if spot number 277 has exactly the same title but there is a different
+  ISCI for SEA and one for SFO, we keep 277 and add SE or SF" (Lee 11/6). A name that is
+  already unique by serial + tag gets none, so a batch where SEA and SFO share their
+  files has no suffix at all.
 * Existing assets are never renamed: an ISCI already in FILMATI keeps its description.
 
 Inputs are the delivered .mov file names
@@ -40,8 +43,9 @@ _SHEET_LANGUAGE_CODE = {
 }
 _FILE_LANGUAGE_CODE = {"ENG": "E", "VT": "V", "CH": "M", "KR": "K", "JP": "J", "SA": "SA"}
 
-_TAG_SUFFIX = {"LEA": "NY", "LWA": "SF"}
-
+# Etere market code → the suffix Lee writes when one serial has a cut per market.
+_MARKET_SUFFIX = {"SEA": "SE", "SFO": "SF", "NYC": "NY", "LAX": "LA", "CVC": "CV",
+                  "HOU": "HO", "CMP": "CM", "WDC": "WD", "DAL": "DA"}
 
 def title_words(raw: str) -> str:
     """'OVER-THE-YEARS' → 'Over the Years'; 'CHILDS-EYES' → 'Childs Eyes'; 'Game-Time' → 'Game Time'."""
@@ -70,14 +74,15 @@ class DeliveredSpot:
     tag: str             # 'LEA-4'
     lang_code: str       # 'E', 'V', 'M', 'C'
     source: str = ""     # file name or sheet
+    market: str = ""     # Etere market code of the sheet the row came from ('SEA'); '' from a .mov name
 
 
-def parse_delivery_name(name: str, sheet_language: str = "") -> Optional[DeliveredSpot]:
+def parse_delivery_name(name: str, sheet_language: str = "", market: str = "") -> Optional[DeliveredSpot]:
     """Read one .mov file name or a sheet's 'File Name / TV Spot Title' (+ ISCI) cell.
 
     Returns None when the name is not IW Group's shape. ``sheet_language`` (the row's
     Language column) wins over the file-name token, which cannot tell Mandarin from
-    Cantonese.
+    Cantonese. ``market`` is the sheet's market code; a .mov name carries none.
     """
     base = name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].strip()
     m = _DELIVERY_RE.match(base)
@@ -100,6 +105,7 @@ def parse_delivery_name(name: str, sheet_language: str = "") -> Optional[Deliver
         tag=m.group("tag").upper(),
         lang_code=lang_code,
         source=base,
+        market=(market or "").upper(),
     )
 
 
@@ -131,11 +137,6 @@ def _group_key(s: DeliveredSpot) -> tuple:
     return (s.model_year, s.model, s.title, s.month, s.tag)
 
 
-def _name_key(s: DeliveredSpot) -> tuple:
-    """The spot NAME without the tag — two versions of it under different tags need a suffix."""
-    return (s.model_year, s.model, s.title, s.month)
-
-
 def propose_names(
     spots: Iterable[DeliveredSpot],
     existing_by_isci: Dict[str, str],
@@ -152,11 +153,14 @@ def propose_names(
     for s in spots:                       # dedupe on ISCI (a sheet repeats rows; SEA and SFO share files)
         if s.isci and s.isci not in seen:
             seen[s.isci] = s
+        elif s.isci and s.market and seen[s.isci].market and s.market != seen[s.isci].market:
+            seen[s.isci].market += "/" + s.market    # one file serving two markets
     spots = sorted(seen.values(), key=_batch_order)
 
-    tags_per_name: Dict[tuple, set] = {}
+    # One serial, two ISCIs for the same cut (lang + duration) = a cut per market → suffix.
+    iscis_per_cut: Dict[tuple, set] = {}
     for s in spots:
-        tags_per_name.setdefault(_name_key(s), set()).add(s.tag)
+        iscis_per_cut.setdefault(_group_key(s) + (s.lang_code, s.duration_sec), set()).add(s.isci)
 
     serial_of_group: Dict[tuple, int] = {}
     # Existing library rows pin their group's serial first.
@@ -183,15 +187,18 @@ def propose_names(
             serial_of_group[key] = serial
             serial += 1
         n = serial_of_group[key]
-        region = s.tag.split("-")[0]
-        suffix = ""
-        if len(tags_per_name[_name_key(s)]) > 1:
-            suffix = "-" + _TAG_SUFFIX.get(region, region)
+        suffix, note = "", ""
+        if len(iscis_per_cut[key + (s.lang_code, s.duration_sec)]) > 1:
+            mk = s.market if s.market and "/" not in s.market else ""
+            suffix = "-" + _MARKET_SUFFIX.get(mk, mk[:2]) if mk else ""
+            if not suffix:
+                note = "two ISCIs for this cut — add the market suffix (SE/SF) by hand"
         desc = (
             f"LEXUS{s.duration_sec}{s.lang_code}{n}{suffix}: "
             f"MY{s.model_year} {s.model} {s.title} {s.month} {s.tag}"
         )
-        note = "" if s.lang_code else "language unknown — set the letter"
+        if not s.lang_code:
+            note = "language unknown — set the letter"
         out.append(NameProposal(
             isci=s.isci, serial=n, code=s.isci, description=desc,
             duration_sec=s.duration_sec, lang_code=s.lang_code, tag=s.tag, note=note,

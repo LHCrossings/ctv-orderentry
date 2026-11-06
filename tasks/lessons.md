@@ -979,7 +979,16 @@ mismatch and would have failed the next time anyone validated them.
    allow all spots to fit." A remark that a choice is HABITUAL is still a chosen value, not
    policy — record it as the fallback he reaches for under a named condition (spots do not
    fit), and ask before promoting it to a default the tooling applies unasked.
-6. **Recurrence (BVK production invoice 2609-012, 2026-10-05):** `is_production` was keyed
+6. **Recurrence (Lexus spot names, 2026-11-06):** October's twelve rows all carried `-NY`/`-SF`,
+   so I rendered "suffix always" into the first proposal, then "suffix when the same name
+   exists under another tag" after Lee's first correction, and both were wrong. His rule took
+   three messages to surface: a suffix only when ONE serial has a different ISCI per market
+   ("277 has exactly the same title but a different ISCI for SEA and for SFO, keep 277 and add
+   SE or SF"). October showed the suffixes, not the condition that produced them. When a
+   naming convention is read off a batch, ask for the CONDITION ("when do you add this?")
+   before the first proposal, and render the rule as a test with a counter-example
+   (`test_one_serial_with_a_cut_per_market_gets_se_and_sf`), not as a default.
+7. **Recurrence (BVK production invoice 2609-012, 2026-10-05):** `is_production` was keyed
    on the ONE sentence the May oracle carried ("charges are for production only"). The
    September BVK affidavit said only "Production Charges", so the page showed an airtime
    invoice with 0 spots and $0 gross. A detector built from a single hand-made oracle must
