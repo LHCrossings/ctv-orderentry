@@ -2485,18 +2485,32 @@
         const cards = results.map((r, idx) => {
             const periodRows = r.periods.map(p => {
                 const statusCells = p.spots.map(s => {
+                    // IW prints the HD marker fused onto some ISCIs ('…HH'); the
+                    // library code is the 12-character form from the delivered file.
+                    const printedHtml = s.isci_printed
+                        ? `<span style="color:var(--text-muted);font-size:0.75rem;margin-left:6px;">(sheet prints ${esc(s.isci_printed)})</span>`
+                        : '';
+                    const modelHtml = s.model
+                        ? `<span style="color:var(--text-muted);font-size:0.75rem;margin-left:6px;">${esc(s.model)}</span>`
+                        : '';
                     if (s.found) {
                         const notesHtml = s.notes
                             ? `<span style="color:var(--nord13);font-size:0.75rem;margin-left:6px;">⚠ ${esc(s.notes)}</span>`
                             : '';
-                        return `<div><span style="color:var(--nord14);">✓</span> <span style="font-family:monospace;">${esc(s.isci)}</span> ${esc(s.rotation_pct)}%${notesHtml}</div>`;
+                        return `<div><span style="color:var(--nord14);">✓</span> <span style="font-family:monospace;">${esc(s.isci)}</span> ${esc(s.rotation_pct)}%${modelHtml}${printedHtml}${notesHtml}</div>`;
                     }
-                    return `<div><span style="color:var(--nord11);">✗</span> <span style="font-family:monospace;">${esc(s.isci)}</span>
+                    return `<div><span style="color:var(--nord11);">✗</span> <span style="font-family:monospace;">${esc(s.isci)}</span>${modelHtml}${printedHtml}
                         <span style="color:var(--nord11);font-size:0.8rem;">— not in media library yet</span></div>`;
                 }).join('');
-                const readyBadge = p.all_found
+                // A period whose rows do not add to 100% (99 for thirds) is a sheet
+                // defect — NYC Nov 2026 dated its ES rows 12/1 and printed 66 / 132.
+                const total = Number(p.rotation_total);
+                const totalWarn = (Number.isFinite(total) && Math.abs(total - 100) > 1.5)
+                    ? `<div style="color:var(--nord13);font-size:0.75rem;">⚠ rotation totals ${esc(total)}% — check the sheet's dates</div>`
+                    : '';
+                const readyBadge = (p.all_found
                     ? `<span style="color:var(--nord14);font-size:0.78rem;">ready</span>`
-                    : `<span style="color:var(--nord13);font-size:0.78rem;">pending library</span>`;
+                    : `<span style="color:var(--nord13);font-size:0.78rem;">pending library</span>`) + totalWarn;
                 return `<tr>
                     <td style="padding:8px 10px;font-family:monospace;">:${p.duration_sec}</td>
                     <td style="padding:8px 10px;font-family:monospace;">${esc(p.date_label)}</td>
@@ -2575,6 +2589,34 @@
                 ${cards}
             </div>`;
         grid.style.display = 'block';
+        results.forEach((r, idx) => lexusAutoPick(idx, r));
+    }
+
+    // Pre-select the contract when the sheet's market + language name exactly one
+    // contract whose flight overlaps the sheet's periods ('Lexus SEA Viet' → 3005).
+    // Anything else is left for the operator — a tool never guesses a contract.
+    async function lexusAutoPick(idx, r) {
+        try {
+            const q = (r.search_suggestion || '').trim();
+            if (q.length < 2 || !(r.periods || []).length) return;
+            const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+            if (!resp.ok) return;
+            const rows = await resp.json();
+            const toSql = us => { const [m, d, y] = (us || '').split('/'); return (y && m && d) ? `${y}-${m}-${d}` : ''; };
+            const overlaps = rows.filter(c => {
+                const cs = toSql(c.date_start), ce = toSql(c.date_end);
+                return r.periods.some(p => p.date_from_sql && p.date_to_sql && cs && ce
+                    && p.date_from_sql <= ce && p.date_to_sql >= cs);
+            });
+            if (overlaps.length !== 1) return;
+            const c = overlaps[0];
+            if (window.lexusCardContracts[idx]) return;   // operator already chose
+            lexusSelectContract(idx, c.id, c.code, `${c.date_start}–${c.date_end}`);
+            const badge = document.getElementById(`lexusContractBadge-${idx}`);
+            if (badge) badge.innerHTML += `<span style="color:var(--text-muted);margin-left:6px;">auto-selected from “${esc(q)}” — change if wrong</span>`;
+        } catch (e) {
+            console.warn('[Lexus auto-pick]', e);
+        }
     }
 
     async function lexusContractSearch(idx) {

@@ -1193,3 +1193,22 @@ Jenna: `Phoenix_20261101_0700.mp4` flashes black in EDIUS too (she put it and th
 - [x] Rehearsed through the FastAPI test client on 3178: 16 lines / 86 spots, all already on the sheet's creatives (Lee's 11/5 hand run) → first live run is a visible no-op
 
 Review: banner language = the creative (every NYS creative is Mandarin); the card prints each line's catalog language instead of filtering by it. First real use = the 11/30+ sheets.
+
+## Lexus November 2026 traffic + spot naming (2026-11-06)
+
+Lee: six IW Group sheets (NYC Hinglish; SEA Hinglish/Chinese/Vietnamese; SFO Hinglish/Vietnamese),
+all for live 2610 contracts (2740, 3001, 3003, 3005, 2742, 2747); November spots downloaded,
+December's not yet; "I need to make spot numbers and names"; SD section always ignored.
+
+- [x] Parser: en-dash flight dates, two-digit years again, stray `HD` markers, `…HH` ISCIs
+      normalised to the 12-char file-name form (`isci_printed` kept), language/model per row,
+      `rotation_total` per period, search suggestion names the language (`Lexus SEA Viet`)
+- [x] Route passes `rotation_total`/`isci_printed`/`language`/`model`; card warns when a period's
+      rows do not add to 100 (NYC ES rows dated 12/1: Nov 66 / Dec 132), shows the printed ISCI,
+      auto-selects the contract when market+language name exactly one overlapping contract
+- [x] `browser_automation/parsers/lexus_spot_names.py` + `scripts/lexus_spot_names.py`: Lee's
+      serial rule from .mov names or sheets; suffix only for twins (Lee 11/6); never renames
+- [x] Six November sheets as fixtures; 17 tests (parser + names)
+- [ ] Lee: ingest the 18 November spots under the proposed names, then drop the six sheets on
+      /traffic/assign-assets and Assign (December periods stay "pending library" until the Dec spots land)
+- [ ] IW: ask whether the NYC ES rows (877H/878H) are November (file names say CY26-NOV)

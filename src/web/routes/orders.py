@@ -9825,6 +9825,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                         else None,
                                         "found": found,
                                         "notes": s.notes,
+                                        "isci_printed": s.isci_printed,
+                                        "language": s.language,
+                                        "model": s.model,
                                     }
                                 )
                             periods_out.append(
@@ -9835,6 +9838,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                     "date_label": p.date_label,
                                     "spots": spots_out,
                                     "all_found": all(s["found"] for s in spots_out),
+                                    # 100 (99 for thirds) when the sheet is consistent; the
+                                    # NYC Nov 2026 sheet dated its ES rows 12/1-12/31 and
+                                    # printed November at 66 / December at 132.
+                                    "rotation_total": p.rotation_total,
                                 }
                             )
 

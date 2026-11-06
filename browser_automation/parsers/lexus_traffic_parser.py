@@ -31,7 +31,34 @@ _COVERAGE_TO_MARKET = {
 # LDA sheets on (Lee 9/28: three sheets parsed to zero rows, so the card assigned
 # nothing and every spot was assigned by hand). Accept both.
 _DATE = r'\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})'
-_DATE_RANGE_RE = re.compile(rf'({_DATE})\s*-\s*({_DATE})')
+# November 2026 sheets print the flight with an en dash ('11/04/26 – 11/30/26');
+# accept hyphen, en dash and em dash.
+_DATE_RANGE_RE = re.compile(rf'({_DATE})\s*[-\u2013\u2014]\s*({_DATE})')
+
+# IW Group's November 2026 sheets carry an 'HD' marker inside the row — after the
+# file name, after the ISCI, or fused onto the ISCI as a second trailing H
+# ('TYIW26TL929HH'). The delivered .mov files are named 'TYIW26TL929H_…', and an
+# ISCI is at most 12 characters, so a 13-character '…HH' is the ISCI plus the
+# marker. The code we look up (and the code Lee ingests) is the 12-character form.
+_HD_TOKEN_RE = re.compile(r'(?<![\w-])HD(?![\w-])')
+_ISCI_HD_SUFFIX_RE = re.compile(r'^([A-Z]{4}\d{2}[A-Z]{2}\d{3}H)H$')
+
+# The word in a contract description that names the sheet's language
+# ('Lexus SEA Viet Est 207 26Q4', 'Lexus SFO Hinglish Est 208 26Q4').
+_LANGUAGE_SEARCH_WORD = {
+    "hinglish":   "Hinglish",
+    "english":    "Hinglish",
+    "vietnamese": "Viet",
+    "mandarin":   "Chinese",
+    "cantonese":  "Chinese",
+    "chinese":    "Chinese",
+}
+
+
+def normalize_isci(isci: str) -> str:
+    """'TYIW26TL929HH' (ISCI + HD marker) → 'TYIW26TL929H'; anything else unchanged."""
+    m = _ISCI_HD_SUFFIX_RE.match(isci)
+    return m.group(1) if m else isci
 
 
 def _parse_date(date_str: str) -> Optional[str]:
@@ -51,6 +78,9 @@ class LexusTrafficSpot:
     title: str
     rotation_pct: float
     notes: str = ""
+    isci_printed: str = ""   # as the sheet printed it, when it differs from ``isci``
+    language: str = ""       # the row's Language column (Hinglish, Vietnamese, Mandarin)
+    model: str = ""          # the row's Campaign column (RX, NX, ES, TX)
 
 
 @dataclass
@@ -60,6 +90,13 @@ class LexusTrafficPeriod:
     date_to_sql: Optional[str]
     date_label: str
     spots: List[LexusTrafficSpot] = field(default_factory=list)
+
+    @property
+    def rotation_total(self) -> float:
+        """Sum of the rows' rotation % — 100 (or 99 for thirds) when the sheet is
+        consistent. The NYC Nov 2026 sheet dated its ES rows 12/1–12/31, so November
+        summed to 66 and December to 132; the card shows the total so that is visible."""
+        return round(sum(s.rotation_pct for s in self.spots), 1)
 
 
 @dataclass
@@ -96,6 +133,7 @@ def parse_lexus_traffic_text(text: str) -> LexusTrafficInstruction:
             break
 
     search_suggestion = f"{advertiser} {market_code}".strip() if market_code else advertiser
+    language = ""
 
     result = LexusTrafficInstruction(
         advertiser=advertiser,
@@ -129,12 +167,16 @@ def parse_lexus_traffic_text(text: str) -> LexusTrafficInstruction:
         if stripped in ("TV Spot",) or re.match(r'^:\d+$', stripped):
             continue
 
+        # Drop the stray HD markers (Nov 2026) so the ISCI sits next to its %.
+        stripped = re.sub(r'\s+', ' ', _HD_TOKEN_RE.sub(' ', stripped)).strip()
+
         # Anchor on ISCI code: all-caps+digits, ≥10 chars, followed by NN%
         anchor_m = re.search(r'\b([A-Z][A-Z0-9]{9,14})\s+(\d+)%', stripped)
         if not anchor_m:
             continue
 
-        isci         = anchor_m.group(1)
+        isci_printed = anchor_m.group(1)
+        isci         = normalize_isci(isci_printed)
         rotation_pct = float(anchor_m.group(2))
 
         # Date range follows the anchor
@@ -155,6 +197,13 @@ def parse_lexus_traffic_text(text: str) -> LexusTrafficInstruction:
 
         duration_sec = int(prefix_m.group(3))
         title        = prefix_m.group(4).strip()
+        row_language = prefix_m.group(1)
+        row_model    = prefix_m.group(2)
+        if not language:
+            language = row_language
+            word = _LANGUAGE_SEARCH_WORD.get(language.lower())
+            if word and market_code:
+                result.search_suggestion = f"{advertiser} {market_code} {word}".strip()
 
         key = (duration_sec, date_from, date_to)
         if key not in period_map:
@@ -167,7 +216,11 @@ def parse_lexus_traffic_text(text: str) -> LexusTrafficInstruction:
             period_order.append(key)
 
         period_map[key].spots.append(
-            LexusTrafficSpot(isci=isci, title=title, rotation_pct=rotation_pct, notes=notes)
+            LexusTrafficSpot(
+                isci=isci, title=title, rotation_pct=rotation_pct, notes=notes,
+                isci_printed=isci_printed if isci_printed != isci else "",
+                language=row_language, model=row_model,
+            )
         )
 
     # Order: :30 before :15, then chronologically within each duration
