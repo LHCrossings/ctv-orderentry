@@ -20,13 +20,15 @@ try:
     from . import admerasia_parser as _ap
     from .admerasia_traffic_color import read_color_grid
     from .admerasia_traffic_legend import read_text_legend
-    from .admerasia_traffic_match import match_creatives
+    from .admerasia_traffic_match import length_keyed_legend, match_creatives
+    from .admerasia_positional import read_grid as _ap_read_grid
     from .admerasia_vision import extract_grid, extract_isci_legend
 except ImportError:
     import admerasia_parser as _ap
     from admerasia_traffic_color import read_color_grid
     from admerasia_traffic_legend import read_text_legend
-    from admerasia_traffic_match import match_creatives
+    from admerasia_traffic_match import length_keyed_legend, match_creatives
+    from admerasia_positional import read_grid as _ap_read_grid
     from admerasia_vision import extract_grid, extract_isci_legend
 
 try:
@@ -334,21 +336,51 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
                 break
 
     # per-row daypart window from the entry vision read — only to break ties when two
-    # same-duration programmes air the same day.
+    # same-duration programmes air the same day. The same read carries each row's
+    # Length column (spot_length), which is the creative key when colour is not.
     row_window: dict = {}
+    row_len: dict = {}
     try:
         vis = extract_grid(pdf_path)
         for i, ln in enumerate(vis.lines):
             w = _daypart_to_frames(ln.daypart)
             if w:
                 row_window[i] = w
+            if ln.spot_length:
+                row_len[i] = int(ln.spot_length)
     except Exception as exc:  # noqa: BLE001
         res.warnings.append(
             f"daypart windows unavailable ({exc}); same-day same-duration ties may fail"
         )
 
+    # Colour-blind legend (McDonald's APA Next, 11/5/2026): every legend row and every
+    # grid cell is plain white, so two creatives of one language "share" a colour. The
+    # IO still says which creative a row holds — the Length column (':15s'/':30s' row
+    # groups, one creative per length) — so key the rows on that instead, provided
+    # the vision rows line up one-to-one with the positional grid rows.
+    row_lang_isci = None
+    shared = [w for w in res.warnings if "share grid colour" in w]
+    if shared and row_len:
+        n_rows = len(_ap_read_grid(pdf_path).rows)
+        if n_rows == len(row_len):
+            row_lang_isci = length_keyed_legend(legend, row_len)
+        else:
+            res.warnings.append(
+                f"vision read {len(row_len)} rows but the grid has {n_rows} — "
+                "cannot key creatives on the Length column"
+            )
+    if row_lang_isci:
+        for w in shared:
+            res.warnings.remove(w)
+        res.warnings.append(
+            "legend carries no colour; creatives matched by each row's Length column "
+            "(one creative per length)"
+        )
+        row_dur = dict(row_len)
+
     m = match_creatives(
-        color_grid, row_dur, row_window, cluster_lang_isci, flight_start, spots, filmati
+        color_grid, row_dur, row_window, cluster_lang_isci, flight_start, spots, filmati,
+        row_lang_isci=row_lang_isci,
     )
     res.assignments = m.assignments
     res.warnings.extend(m.warnings)

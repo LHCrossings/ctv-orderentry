@@ -76,12 +76,45 @@ def _pick_isci(lang_map, spot_languages):
                         "overlapping language windows")
 
 
+def length_keyed_legend(legend_rows, row_lengths):
+    """{grid_row: {language: isci}} when the LENGTH column, not colour, names the creative.
+
+    The McDonald's APA Next IOs (11/5/2026) print the ISCI legend with no fill at all
+    and group the grid rows under ':15s <title>' / ':30s <title>' — one creative per
+    length per language. Colour then carries nothing (every swatch and cell is white)
+    while the row's own Length column is exact. Usable only when, within each language,
+    every legend creative has a distinct duration; two same-length creatives in one
+    language are a real rotation that only colour (or a percentage) could split, so
+    this returns None and the caller keeps the colour path and its warning.
+
+    legend_rows : objects with .isci_code, .duration_sec, .language
+    row_lengths : {grid_row_index: duration_sec} from the entry read's Length column
+    """
+    by_lang: dict = {}
+    for r in legend_rows:
+        if not r.duration_sec:
+            return None
+        lang = getattr(r, "language", None)
+        if r.duration_sec in by_lang.setdefault(lang, {}):
+            return None  # two creatives of one length in one language
+        by_lang[lang][r.duration_sec] = r.isci_code
+    out: dict = {}
+    for row, secs in row_lengths.items():
+        m = {lang: d[secs] for lang, d in by_lang.items() if secs in d}
+        if m:
+            out[row] = m
+    return out or None
+
+
 def match_creatives(color_grid, row_dur, row_window, cluster_lang_isci, flight_start, spots,
-                    filmati_by_isci) -> MatchResult:
+                    filmati_by_isci, row_lang_isci=None) -> MatchResult:
     """
     row_dur           : {grid_row_index: duration_sec}  (from the legend's own :15/:30)
     row_window        : {grid_row_index: (start_frames, end_frames)}  (daypart; tie-break only)
     cluster_lang_isci : {palette_cluster_index: {language|None: isci_code}}
+    row_lang_isci     : optional {grid_row_index: {language|None: isci_code}}; when given,
+                        a cell's creative comes from its ROW (the Length column) instead
+                        of its colour — see length_keyed_legend().
 
     A spot is assigned the colour of the grid cell for the ONE program row that (a) has
     that spot's duration and (b) actually has a coloured cell on that spot's date. When
@@ -95,9 +128,14 @@ def match_creatives(color_grid, row_dur, row_window, cluster_lang_isci, flight_s
 
     # Guardrail: each grid row must be single-duration (a :15 row can't hold :30 colour).
     # Uses the legend duration, so it still fires for a creative missing from FILMATI.
+    def _cell_map(c):
+        if row_lang_isci is not None:
+            return row_lang_isci.get(c.row) or {}
+        return cluster_lang_isci.get(c.cluster) or {}
+
     row_secs = defaultdict(set)
     for c in color_grid.cells:
-        for isci in (cluster_lang_isci.get(c.cluster) or {}).values():
+        for isci in _cell_map(c).values():
             fil = filmati_by_isci.get(isci)
             if fil:
                 row_secs[c.row].add(round(fil["duration"] / _FPS))
@@ -130,7 +168,7 @@ def match_creatives(color_grid, row_dur, row_window, cluster_lang_isci, flight_s
             continue
         cell = cell_by_rc[(cand[0], col)]
         langs = s.get("languages") or []
-        isci, lang, why = _pick_isci(cluster_lang_isci.get(cell.cluster) or {}, langs)
+        isci, lang, why = _pick_isci(_cell_map(cell), langs)
         if not isci:
             res.assignments.append(SpotAssignment(s["id"], None, None, False, False, why))
             continue
