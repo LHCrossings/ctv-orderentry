@@ -63,7 +63,7 @@ _DISPLAY_NAMES = {
     "SJCOUNTY": "San Joaquin County",
     "HPSJ": "Health Plan of San Joaquin",
     "SANMATEO": "San Mateo County Voters",
-    "VIDA": "The Vida Agency / Puget Sound Energy",
+    "VIDA": "The Vida Agency (Puget Sound Energy, WA Health Benefit Exchange)",
     "SNOQUALMIE": "Snoqualmie Casino",
     "VIEWPOINT": "Viewpoint Ads / Mayor Lurie Proposition",
     "HARRAHS": "Harrah's Northern California",

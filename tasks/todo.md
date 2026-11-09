@@ -1228,3 +1228,30 @@ until the IO is corrected.
 - [x] Rehearsed plan (no write): 4 lines → 5 Etere lines, 158 spots, $20,565.22 airtime +
       $2,941.18 production = $23,506.40 = the IO's KQTA TOT
 - [ ] Wait for the corrected IO with bonus lines; re-run the gather; Lee enters
+
+## Vida Agency xlsx proposal — WA Health Plan Finder OE (2026-11-09)
+
+Oracle: 1576 `Vida WAHBE 2411` "WA Health Benefit Exchange Phase 1" + 1577 `... 2412` "Phase 2"
+(cust 360, agency 260 @ 15%, Broadcast 316, CUSTOMERREF "Phase N", 15/0/0, every line Rotation;
+Cantonese "7p-8p; 11:30p-12a" = ONE 7p-12a line pruned to the five "C -" blocks; Chinese ROS
+7p-12a with C+M blocks; Viet ROS 11a-1p).
+
+- [x] `parse_vida` dispatches on extension: `parse_vida_pdf` (unchanged) | `parse_vida_xlsx`
+      (columns by header label; week columns are datetimes; GROSS sheet: DISCOUNTED gross rate,
+      Proposed GROSS, Proposed Net; commission derived from the PAID footer and checked on every
+      row + production; phases from the "Phase N - … through m/d" labels → one flight each)
+- [x] VidaOrder carries `agency_pct` (0 for PSE NET, 15 here), `rates_are_net` per sheet; VidaLine
+      `net_rate`; VidaFlight `phase`; charge amount = Production-box value (gross), net kept
+- [x] Automation: agency_pct from the sheet (ANAGRAF cross-check), CUSTOMERREF = phase, naming
+      defaults from the customer's prior Vida contracts (`Vida WAHBE 2611` / "WA Health Benefit
+      Exchange Phase 1"), separation from the precedent's lines (15/0/0), blocks on every line
+      pruned to the language's prefixes (C / M / V; Chinese = C+M) with the removed names printed,
+      Chinese ROS window = the 1577 precedent (M-Su 7p-11:59p), added-value interview = header note
+- [x] Detection: xlsx cell "THE VIDA AGENCY" in `_detect_xlsx_content`, scan cache v24
+- [x] Fixture `tests/fixtures/vida/vida_wahbe_oe_2611_rev1.xlsx`; tests: totals, phases, commission,
+      union window, tamper (dropped cell / net≠gross×0.85 / renamed header / no-op), plan caps,
+      naming precedent, block prune rule, bridge detail
+- [x] Rehearsed 11/9: `Vida WAHBE 2611` 8 lines / 216 spots / $6,840 + production $3,176.47 and
+      `Vida WAHBE 2612` 16 lines / 238 spots / $7,640 (454 = the sheet's Total), 15%, ref Phase N,
+      Cantonese line 5 "C -" blocks (8 M dropped), all Rotation; rolled back
+- [ ] Lee enters from the queue

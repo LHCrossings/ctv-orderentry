@@ -47,13 +47,41 @@ Reconciliation is the document's own arithmetic and RAISES on any mismatch:
 per row Σ cells == Total Units and Value == rate × units; the PAID / BONUSES /
 Total footer rows per column; the BONUSES money cells (Σ Value, Σ paid Net);
 "Net amount" == Σ paid Net + production Net.
+
+Second shape (2026-11-09): the same proposal as an EXCEL workbook — "WA Health
+Plan Finder Open Enrollment" (advertiser WA Health Benefit Exchange, ANAGRAF
+360, which DOES carry the agency's 15%: precedent Vida WAHBE 2411 / 2412,
+P_AGENZIA 15). `parse_vida` dispatches on the extension (the Crispin rule: one
+order type, one dispatcher, two readers); `parse_vida_xlsx` reads the sheet by
+HEADER LABEL, never by column index:
+
+    Programming | Schedule | GROSS RATE CARD | DISCOUNTED | 16-Nov … 11-Jan |
+    Total Units | Value | Proposed GROSS | Proposed Net Amt
+
+- Week headers are real dates (Mondays, ascending — refuse otherwise).
+- Money basis is GROSS here: DISCOUNTED is the per-spot gross rate that enters
+  verbatim, "Proposed GROSS" = rate × units, "Proposed Net Amt" = gross × (1 −
+  commission). The commission is DERIVED from the PAID footer (1 − net/gross)
+  and every paid row and the production row must net at that same rate, or
+  the parse refuses. `VidaOrder.agency_pct` carries it (15.0); a NET sheet (the
+  PSE shape) carries 0.0 and `rates_are_net`.
+- "Phase 1 - through 12/13" / "Phase 2 - 12/14 through 1/15" above the week
+  grid are the flight ranges: one contract per phase, CUSTOMERREF "Phase N"
+  (precedent 1576 / 1577). A phase with no "from" opens on the first week's
+  Monday (phase 1) or the day after the previous phase ends.
+- Production: Value = list, Proposed GROSS = what goes in the Production box,
+  Proposed Net = what the client pays (gross × (1 − commission)).
+- "Added Value … Interview segment" rows are $0 and never airtime; they are
+  kept as notes for the contract header.
+- The Investment Summary (per language Gross / Net, Production, Total) is
+  reconciled against the rows.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 _MONTHS = {
@@ -151,10 +179,18 @@ class VidaLine:
     flight_index: int = 0
     flight_start: Optional[date] = None
     flight_end: Optional[date] = None
+    # Per-spot NET after the agency commission (== rate on a NET sheet / 0% client).
+    net_rate: Optional[float] = None
+    rate_card: Optional[float] = None  # the sheet's list ("GROSS RATE CARD") rate
+    gross_total: Optional[float] = None  # the row's "Proposed GROSS"
 
     @property
     def total_spots(self) -> int:
         return sum(self.week_spots)
+
+    @property
+    def net_per_spot(self) -> float:
+        return self.rate if self.net_rate is None else self.net_rate
 
     @property
     def time_ranges(self) -> List[str]:
@@ -223,8 +259,13 @@ class VidaLine:
 @dataclass
 class VidaCharge:
     description: str
-    amount: float  # the billed (Net Amt) amount
+    amount: float  # what goes in the Production box (gross when a commission applies)
     list_amount: Optional[float] = None
+    net_amount: Optional[float] = None  # what the client pays (== amount at 0%)
+
+    @property
+    def billed(self) -> float:
+        return self.amount if self.net_amount is None else self.net_amount
 
 
 @dataclass
@@ -235,10 +276,12 @@ class VidaFlight:
     lines: List[VidaLine] = field(default_factory=list)
     page: int = 1
     title: str = ""
+    phase: str = ""  # "Phase 1" — the sheet's own name for the flight (→ CUSTOMERREF)
 
     @property
     def label(self) -> str:
-        return f"{self.start.month}/{self.start.day}-{self.end.month}/{self.end.day}/{self.end:%y}"
+        span = f"{self.start.month}/{self.start.day}-{self.end.month}/{self.end.day}/{self.end:%y}"
+        return f"{self.phase} {span}" if self.phase else span
 
     @property
     def paid_lines(self) -> List[VidaLine]:
@@ -250,6 +293,12 @@ class VidaFlight:
 
     @property
     def net_total(self) -> float:
+        """What the client pays for this flight's airtime (after any commission)."""
+        return round(sum(ln.net_per_spot * ln.total_spots for ln in self.paid_lines), 2)
+
+    @property
+    def entered_total(self) -> float:
+        """Σ rate × spots at the rate that enters Etere (gross on a GROSS sheet)."""
         return round(sum(ln.rate * ln.total_spots for ln in self.paid_lines), 2)
 
 
@@ -267,6 +316,10 @@ class VidaOrder:
     charges: List[VidaCharge] = field(default_factory=list)
     rates_are_net: bool = True  # NET quoted; the 0% agency commission keeps gross == net
     source_path: str = ""
+    # Agency commission the sheet nets at (derived from its own gross/net columns);
+    # 0.0 on a NET sheet. The header is written with this value explicitly.
+    agency_pct: float = 0.0
+    notes: List[str] = field(default_factory=list)  # $0 added-value items (header note)
 
     @property
     def advertiser(self) -> str:
@@ -291,6 +344,10 @@ class VidaOrder:
     @property
     def net_airtime(self) -> float:
         return round(sum(fl.net_total for fl in self.flights), 2)
+
+    @property
+    def entered_airtime(self) -> float:
+        return round(sum(fl.entered_total for fl in self.flights), 2)
 
 
 # ─── Small helpers ───────────────────────────────────────────────────────────
@@ -565,6 +622,7 @@ def _read_page(text: str, page_no: int, source_path: str) -> dict:
                 value_total=r["value"],
                 net_total=r["net"],
                 is_bonus=is_bonus,
+                net_rate=rate,
             )
         )
         # Per-row arithmetic
@@ -631,7 +689,9 @@ def _read_page(text: str, page_no: int, source_path: str) -> dict:
                 f"Vida parser: page {page_no} Production row has no "
                 "readable Net Amt — refusing to guess the charge"
             )
-        charges.append(VidaCharge("Production", float(amt), footer.get("production_value")))
+        charges.append(
+            VidaCharge("Production", float(amt), footer.get("production_value"), float(amt))
+        )
     if footer.get("net_amount") is not None:
         want = round(sum_net + sum(c.amount for c in charges), 2)
         if abs(want - footer["net_amount"]) > 0.01:
@@ -667,6 +727,7 @@ def _split_flights(page: dict) -> List[VidaFlight]:
             )
         owner.append(hits[0])
 
+    phases: List[str] = page.get("phases") or [""] * len(ranges)
     flights: List[VidaFlight] = []
     for i, (a, b) in enumerate(ranges):
         idx = [k for k, o in enumerate(owner) if o == i]
@@ -680,7 +741,8 @@ def _split_flights(page: dict) -> List[VidaFlight]:
             end=b,
             week_dates=[week_dates[k] for k in idx],
             page=page["page"],
-            title=page["hdr"]["title"],
+            title=page["hdr"].get("title", ""),
+            phase=phases[i],
         )
         for ln in page["lines"]:
             spots = [ln.week_spots[k] for k in idx]
@@ -701,6 +763,8 @@ def _split_flights(page: dict) -> List[VidaFlight]:
                     is_bonus=ln.is_bonus,
                     flight_start=a,
                     flight_end=b,
+                    net_rate=ln.net_rate,
+                    rate_card=ln.rate_card,
                 )
             )
         flights.append(fl)
@@ -710,11 +774,16 @@ def _split_flights(page: dict) -> List[VidaFlight]:
 # ─── Entry points ────────────────────────────────────────────────────────────
 
 
-def parse_vida_pages(pages: List[str], source_path: str = "") -> VidaOrder:
-    """Parse the per-page text of a Vida proposal (testable without pdfplumber)."""
-    if not pages:
-        raise VidaParseError("Vida parser: no pages")
-    read = [_read_page(t, i + 1, source_path) for i, t in enumerate(pages)]
+def _assemble(
+    read: List[dict],
+    source_path: str,
+    *,
+    rates_are_net: bool,
+    agency_pct: float,
+    notes: Optional[List[str]] = None,
+) -> VidaOrder:
+    """Read pages/sheets → one VidaOrder: split each into flights, number the
+    lines, and check the whole-order invariants (ascending flights, one length)."""
     hdr0 = read[0]["hdr"]
     flights: List[VidaFlight] = []
     charges: List[VidaCharge] = []
@@ -746,12 +815,22 @@ def parse_vida_pages(pages: List[str], source_path: str = "") -> VidaOrder:
         length_sec=lengths.pop(),
         flights=flights,
         charges=charges,
-        rates_are_net=True,
+        rates_are_net=rates_are_net,
         source_path=source_path,
+        agency_pct=agency_pct,
+        notes=list(notes or []),
     )
 
 
-def parse_vida(path: str) -> VidaOrder:
+def parse_vida_pages(pages: List[str], source_path: str = "") -> VidaOrder:
+    """Parse the per-page text of a Vida proposal PDF (testable without pdfplumber)."""
+    if not pages:
+        raise VidaParseError("Vida parser: no pages")
+    read = [_read_page(t, i + 1, source_path) for i, t in enumerate(pages)]
+    return _assemble(read, source_path, rates_are_net=True, agency_pct=0.0)
+
+
+def parse_vida_pdf(path: str) -> VidaOrder:
     """Parse a Vida Agency proposal PDF (every page — never pages[0] only)."""
     import pdfplumber
 
@@ -760,6 +839,556 @@ def parse_vida(path: str) -> VidaOrder:
         for p in pdf.pages:
             pages.append(p.extract_text() or "")
     return parse_vida_pages(pages, source_path=path)
+
+
+# ─── Excel reader ────────────────────────────────────────────────────────────
+
+_PHASE_RE = re.compile(r"\bphase\s*(\d+)\b", re.I)
+_MD_RE = re.compile(r"(?<![\d/])(\d{1,2})/(\d{1,2})(?![\d/])")  # "12/13", never "12/13/26"
+_SHEET_LABELS = ("project", "market", "agency", "contact", "email", "date", "revision")
+
+
+def _txt(v) -> str:
+    """Cell value → one-space-normalised text ('' for None)."""
+    return "" if v is None else " ".join(str(v).split())
+
+
+def _as_date(v) -> Optional[date]:
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    m = _DATE_RE.search(_txt(v))
+    return date(int(m.group(3)), int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _num(v, what: str, row_no: int) -> Optional[float]:
+    """A numeric cell → float; blank / '-' → None (never 0: DART lesson); text → refuse."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = _txt(v).replace("$", "").replace(",", "").strip()
+    if t in ("", "-"):
+        return None
+    try:
+        return float(t)
+    except ValueError:
+        raise VidaParseError(
+            f"Vida xlsx: row {row_no} {what} cell {_txt(v)!r} is not a number"
+        ) from None
+
+
+def _int_cell(v, what: str, row_no: int) -> int:
+    f = _num(v, what, row_no)
+    if f is None:
+        return 0  # an empty grid cell is 0; a DROPPED cell shows up in Total Units
+    if abs(f - round(f)) > 1e-9:
+        raise VidaParseError(f"Vida xlsx: row {row_no} {what} cell {f} is not a whole number")
+    return int(round(f))
+
+
+def _sheet_rows(path: str) -> List[list]:
+    """The first worksheet that carries a 'Programming … Total Units' header,
+    as lists of raw cell values (None for empty)."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, data_only=True)
+    try:
+        for ws in wb.worksheets:
+            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+            if _header_row_index(rows) is not None:
+                return rows
+    finally:
+        wb.close()
+    raise VidaParseError(
+        f"Vida xlsx: no sheet in {path} has a 'Programming … Total Units' header row"
+    )
+
+
+def _header_row_index(rows: List[list]) -> Optional[int]:
+    for i, row in enumerate(rows):
+        texts = [_txt(c).lower() for c in row]
+        if any(t.startswith("programming") for t in texts) and any(
+            "total" in t and "units" in t for t in texts
+        ):
+            return i
+    return None
+
+
+def _map_columns(header: list, row_no: int) -> dict:
+    """Header row → {field: column index}; weeks → [(index, date)]. A missing
+    required label refuses BY NAME; an added column is a no-op."""
+    cols: dict = {"weeks": []}
+    for i, c in enumerate(header):
+        d = _as_date(c) if not isinstance(c, str) else None
+        if d is not None:
+            cols["weeks"].append((i, d))
+            continue
+        t = _txt(c).lower()
+        if not t:
+            continue
+        if t.startswith("programming"):
+            cols["program"] = i
+        elif t.startswith("schedule"):
+            cols["schedule"] = i
+        elif "rate card" in t:
+            cols["rate_card"] = i
+        elif t.startswith("discounted"):
+            cols["rate"] = i
+            cols["basis"] = "gross"
+        elif t == "net" or (t.startswith("net") and "amt" not in t and "amount" not in t):
+            cols["rate"] = i
+            cols["basis"] = "net"
+        elif "total" in t and "units" in t:
+            cols["total"] = i
+        elif t == "value":
+            cols["value"] = i
+        elif "gross" in t and "rate" not in t:
+            cols["gross"] = i
+        elif "amt" in t or "net amount" in t:
+            cols["net"] = i
+    for need, label in (
+        ("program", "Programming"),
+        ("schedule", "Schedule"),
+        ("rate", "DISCOUNTED (or NET) rate"),
+        ("total", "Total Units"),
+        ("net", "Net Amt"),
+    ):
+        if need not in cols:
+            raise VidaParseError(
+                f"Vida xlsx: header row {row_no} has no '{label}' column — "
+                "the sheet layout changed; refusing to guess"
+            )
+    if not cols["weeks"]:
+        raise VidaParseError(f"Vida xlsx: header row {row_no} names no week (date) columns")
+    if cols["basis"] == "gross" and "gross" not in cols:
+        raise VidaParseError(
+            f"Vida xlsx: header row {row_no} has a DISCOUNTED rate but no "
+            "'Proposed GROSS' column — cannot tell what basis the rate is"
+        )
+    return cols
+
+
+def _phase_ranges(
+    phases: List[tuple[str, str]], week_dates: List[date]
+) -> tuple[List[tuple[date, date]], List[str]]:
+    """[('Phase 1', 'Phase 1 - through 12/13'), …] → [(start, end)], [label].
+    Dates get their year from the week columns (roll forward when the month
+    goes backwards); a missing 'from' is the first Monday / the day after the
+    previous phase."""
+    md: List[tuple[int, int]] = []
+    shape: List[tuple[bool, bool]] = []  # (has_from, has_to) per phase
+    for _label, text in phases:
+        toks = [(int(a), int(b)) for a, b in _MD_RE.findall(text)]
+        if len(toks) == 2:
+            md.extend(toks)
+            shape.append((True, True))
+        elif len(toks) == 1 and re.search(r"\b(through|thru|to|-)\b", text, re.I):
+            md.append(toks[0])
+            shape.append((False, True))
+        else:
+            raise VidaParseError(
+                f"Vida xlsx: cannot read the flight window of {text!r} "
+                "(expected 'm/d through m/d' or 'through m/d')"
+            )
+    ds = _resolve_dates(md, week_dates[0].year, week_dates[0].month)
+    ranges: List[tuple[date, date]] = []
+    k = 0
+    for i, (has_from, _has_to) in enumerate(shape):
+        if has_from:
+            a, b = ds[k], ds[k + 1]
+            k += 2
+        else:
+            a = week_dates[0] if i == 0 else ranges[-1][1] + timedelta(days=1)
+            b = ds[k]
+            k += 1
+        if b < a:
+            raise VidaParseError(
+                f"Vida xlsx: {phases[i][0]} {a:%m/%d/%y}-{b:%m/%d/%y} ends before it starts"
+            )
+        if ranges and a <= ranges[-1][1]:
+            raise VidaParseError(
+                f"Vida xlsx: {phases[i][0]} opens {a:%m/%d/%y}, inside "
+                f"{phases[i - 1][0]} (ends {ranges[-1][1]:%m/%d/%y})"
+            )
+        ranges.append((a, b))
+    return ranges, [label for label, _t in phases]
+
+
+def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, List[str]]:
+    """The workbook grid → the same page dict `_read_page` returns, plus
+    (rates_are_net, agency_pct, notes)."""
+    hidx = _header_row_index(rows)
+    if hidx is None:
+        raise VidaParseError("Vida xlsx: no 'Programming … Total Units' header row")
+    hdr: dict = {"title": ""}
+    phases: List[tuple[str, str]] = []
+    for r_i, row in enumerate(rows[:hidx]):
+        for c_i, cell in enumerate(row):
+            t = _txt(cell)
+            if not t:
+                continue
+            low = t.lower()
+            label = low.rstrip(": ").strip()
+            if label in _SHEET_LABELS:
+                val = next((v for v in row[c_i + 1 :] if v is not None and _txt(v)), None)
+                if label in ("date", "revision"):
+                    d = _as_date(val)
+                    if d:
+                        hdr["date"] = d
+                else:
+                    hdr[label] = _txt(val)
+                continue
+            if "flight schedule" in low:
+                m = _LEN_RE.search(t)
+                if m:
+                    hdr["length_sec"] = int(m.group(1))
+            m = _PHASE_RE.search(t)
+            if m:
+                phases.append((f"Phase {int(m.group(1))}", t))
+    if "length_sec" not in hdr:
+        raise VidaParseError(
+            "Vida xlsx: the sheet does not state the spot length ('FLIGHT SCHEDULE (:30seconds')"
+        )
+
+    cols = _map_columns(rows[hidx], hidx + 1)
+    basis = cols["basis"]
+    week_idx = [i for i, _d in cols["weeks"]]
+    week_dates = [d for _i, d in cols["weeks"]]
+    for w in week_dates:
+        if w.weekday() != 0:
+            raise VidaParseError(f"Vida xlsx: week column {w:%m/%d/%Y} is a {w:%A}, not a Monday")
+    if week_dates != sorted(week_dates) or len(set(week_dates)) != len(week_dates):
+        raise VidaParseError(
+            f"Vida xlsx: week columns do not ascend: {[w.strftime('%m/%d/%y') for w in week_dates]}"
+        )
+    n_weeks = len(week_dates)
+
+    def cell(row: list, key: str):
+        i = cols.get(key)
+        return row[i] if i is not None and i < len(row) else None
+
+    def money_cells(row: list, row_no: int) -> dict:
+        return {
+            k: _num(cell(row, k), k, row_no)
+            for k in ("rate_card", "rate", "value", "gross", "net")
+            if k in cols
+        }
+
+    def grid_cells(row: list, row_no: int) -> tuple[List[int], int]:
+        cells = [_int_cell(row[i] if i < len(row) else None, "week", row_no) for i in week_idx]
+        return cells, _int_cell(cell(row, "total"), "Total Units", row_no)
+
+    # ── Airtime rows: header+1 … the PAID footer ──
+    data: List[dict] = []
+    footer: dict = {}
+    summary: dict = {}
+    r = hidx + 1
+    while r < len(rows):
+        row = rows[r]
+        row_no = r + 1
+        name = _txt(cell(row, "program"))
+        low = name.lower()
+        left = " ".join(_txt(c) for c in row[: cols["program"]]).lower()
+        if low.startswith("paid"):
+            cells, total = grid_cells(row, row_no)
+            footer["paid"] = cells + [total]
+            footer["paid_money"] = money_cells(row, row_no)
+            r += 1
+            break
+        if name:
+            is_bonus_row = "bonus" in left or low.startswith("bonus")
+            sched = _txt(cell(row, "schedule"))
+            cells, total = grid_cells(row, row_no)
+            data.append(
+                {
+                    "row_no": row_no,
+                    "name": (
+                        f"Bonus {name}" if is_bonus_row and not low.startswith("bonus") else name
+                    )
+                    + (f" {sched}" if is_bonus_row and sched else ""),
+                    "schedule": sched,
+                    "cells": cells,
+                    "total": total,
+                    "bonus_marked": is_bonus_row,
+                    **money_cells(row, row_no),
+                }
+            )
+        r += 1
+    if "paid" not in footer:
+        raise VidaParseError("Vida xlsx: no PAID footer row below the airtime rows")
+    if not data:
+        raise VidaParseError("Vida xlsx: no airtime rows between the header and PAID")
+
+    # ── Footer: BONUSES, Added Value, PRODUCTION, Total; then the Investment Summary ──
+    notes: List[str] = []
+    while r < len(rows):
+        row = rows[r]
+        row_no = r + 1
+        name = _txt(cell(row, "program"))
+        low = name.lower()
+        left = " ".join(_txt(c) for c in row[: cols["program"]]).lower()
+        if low.startswith("bonus") and "bonus" not in footer:
+            cells, total = grid_cells(row, row_no)
+            footer["bonus"] = cells + [total]
+        elif low.startswith("production") and "production" not in footer:
+            footer["production"] = money_cells(row, row_no)
+        elif "added value" in left or low.startswith("added value"):
+            m = money_cells(row, row_no)
+            if (m.get("gross") or 0) or (m.get("net") or 0):
+                raise VidaParseError(
+                    f"Vida xlsx: row {row_no} {name!r} carries money "
+                    f"(gross {m.get('gross')}, net {m.get('net')}) — an added-value "
+                    "row is $0; refusing to guess whether it is airtime"
+                )
+            notes.append(f"{name} (value ${m.get('value') or 0:,.0f}, $0)")
+        elif low.startswith("total") and "total" not in footer:
+            cells, total = grid_cells(row, row_no)
+            footer["total"] = cells + [total]
+            footer["total_money"] = money_cells(row, row_no)
+            r += 1
+            break
+        r += 1
+    # Investment Summary: a row with 'Gross Amount' / 'Net Amount' labels, then
+    # label | gross | net rows until a blank.
+    while r < len(rows):
+        texts = [_txt(c).lower() for c in rows[r]]
+        if any("gross amount" in t for t in texts) and any("net amount" in t for t in texts):
+            gi = next(i for i, t in enumerate(texts) if "gross amount" in t)
+            ni = next(i for i, t in enumerate(texts) if "net amount" in t)
+            li = next((i for i in range(gi - 1, -1, -1) if texts[i]), cols["program"])
+            r += 1
+            while r < len(rows):
+                row = rows[r]
+                label = _txt(row[li] if li < len(row) else None)
+                if not label:
+                    break
+                summary[label.lower().rstrip(": ")] = (
+                    _num(row[gi] if gi < len(row) else None, "summary gross", r + 1),
+                    _num(row[ni] if ni < len(row) else None, "summary net", r + 1),
+                )
+                r += 1
+            break
+        r += 1
+
+    # ── Money basis / commission ──
+    rates_are_net = basis == "net"
+    paid_rows = [d for d in data if not (d["bonus_marked"] or (d.get("rate") or 0) == 0)]
+    if not paid_rows:
+        raise VidaParseError("Vida xlsx: every airtime row is bonus / $0 — nothing to bill")
+    if rates_are_net:
+        agency_pct = 0.0
+    else:
+        g = sum(d.get("gross") or 0 for d in paid_rows)
+        n = sum(d.get("net") or 0 for d in paid_rows)
+        if g <= 0 or n <= 0:
+            raise VidaParseError(
+                f"Vida xlsx: paid rows carry gross ${g:,.2f} / net ${n:,.2f} — "
+                "cannot derive the commission"
+            )
+        agency_pct = round((1 - n / g) * 100, 2)
+        if not 0 <= agency_pct < 50:
+            raise VidaParseError(f"Vida xlsx: derived commission {agency_pct}% is not credible")
+    keep = 1 - agency_pct / 100
+
+    # ── Rows → VidaLine, each reconciled against its own cells ──
+    parsed: List[VidaLine] = []
+    for d in data:
+        name, row_no = d["name"], d["row_no"]
+        rate_cell = d.get("rate")
+        is_bonus = d["bonus_marked"] or (rate_cell or 0) == 0 and not (d.get("net") or 0)
+        m = _DAYS_RE.search(d["schedule"])
+        days = _canon_days(m.group(1), m.group(2)) if m else ""
+        time_text = d["schedule"][m.end() :].strip() if m else ""
+        if not is_bonus:
+            if not m or not _TIME_RE.search(time_text):
+                raise VidaParseError(
+                    f"Vida xlsx: row {row_no} paid row {name!r} schedule {d['schedule']!r} "
+                    "has no readable day pattern / time window — never defaulted"
+                )
+            if rate_cell is None:
+                raise VidaParseError(f"Vida xlsx: row {row_no} paid row {name!r} has no rate")
+        if sum(d["cells"]) != d["total"]:
+            raise VidaParseError(
+                f"Vida xlsx: row {row_no} {name!r}: week cells sum to {sum(d['cells'])} "
+                f"but Total Units says {d['total']} — a cell was dropped or edited"
+            )
+        rc = d.get("rate_card")
+        if (
+            rc is not None
+            and d.get("value") is not None
+            and abs(rc * d["total"] - d["value"]) > 0.01
+        ):
+            raise VidaParseError(
+                f"Vida xlsx: row {row_no} {name!r}: rate card ${rc:.2f} × {d['total']} "
+                f"!= Value ${d['value']:,.2f}"
+            )
+        rate = 0.0 if is_bonus else float(rate_cell)
+        if rates_are_net:
+            net_rate = rate
+            line_net = d.get("net")
+            if not is_bonus and abs(rate * d["total"] - (line_net or 0)) > 0.01:
+                raise VidaParseError(
+                    f"Vida xlsx: row {row_no} {name!r}: ${rate:.2f} × {d['total']} != "
+                    f"Net Amt ${line_net or 0:,.2f}"
+                )
+        else:
+            gross, net = d.get("gross") or 0.0, d.get("net") or 0.0
+            if abs(rate * d["total"] - gross) > 0.01:
+                raise VidaParseError(
+                    f"Vida xlsx: row {row_no} {name!r}: ${rate:.2f} × {d['total']} != "
+                    f"Proposed GROSS ${gross:,.2f}"
+                )
+            if abs(gross * keep - net) > 0.01:
+                raise VidaParseError(
+                    f"Vida xlsx: row {row_no} {name!r}: net ${net:,.2f} is not gross "
+                    f"${gross:,.2f} less the sheet's {agency_pct:g}% commission "
+                    f"(${gross * keep:,.2f}) — rows disagree on the commission"
+                )
+            net_rate = round(rate * keep, 4)
+        parsed.append(
+            VidaLine(
+                program=name if is_bonus else name,
+                days=days,
+                time_text=time_text,
+                rate=rate,
+                value_rate=rc if rc is not None else rate_cell,
+                length_sec=hdr["length_sec"],
+                week_dates=list(week_dates),
+                week_spots=list(d["cells"]),
+                value_total=d.get("value"),
+                net_total=d.get("net"),
+                is_bonus=is_bonus,
+                net_rate=net_rate,
+                rate_card=rc,
+                gross_total=d.get("gross"),
+            )
+        )
+
+    # ── Footer rows per column (PAID / BONUSES / Total), and their money ──
+    paid = [ln for ln in parsed if not ln.is_bonus]
+    bonus = [ln for ln in parsed if ln.is_bonus]
+
+    def _check(label: str, stated: Optional[List[int]], group: List[VidaLine]) -> None:
+        if stated is None:
+            return
+        want = [sum(ln.week_spots[i] for ln in group) for i in range(n_weeks)] + [
+            sum(ln.total_spots for ln in group)
+        ]
+        if stated != want:
+            raise VidaParseError(
+                f"Vida xlsx: '{label}' row {stated} != lines {want} — a row was "
+                "dropped or mis-read; refusing to enter"
+            )
+
+    _check("PAID", footer.get("paid"), paid)
+    _check("BONUSES", footer.get("bonus"), bonus)
+    _check("Total", footer.get("total"), parsed)
+
+    def _money_check(label: str, stated: Optional[float], want: float) -> None:
+        if stated is not None and abs(stated - want) > 0.01:
+            raise VidaParseError(f"Vida xlsx: {label} ${stated:,.2f} != rows ${want:,.2f}")
+
+    pm = footer.get("paid_money", {})
+    paid_gross = round(sum(ln.gross_total or 0 for ln in paid), 2)
+    paid_net = round(sum(ln.net_total or 0 for ln in paid), 2)
+    # The PAID row's Value cell is Σ Value over EVERY row, bonus included (the PDF's BONUSES row too).
+    _money_check("PAID Value", pm.get("value"), round(sum(ln.value_total or 0 for ln in parsed), 2))
+    _money_check("PAID Proposed GROSS", pm.get("gross"), paid_gross)
+    _money_check("PAID Net Amt", pm.get("net"), paid_net)
+
+    charges: List[VidaCharge] = []
+    if "production" in footer:
+        p = footer["production"]
+        if rates_are_net:
+            amt = p.get("net")
+            if amt is None:
+                raise VidaParseError("Vida xlsx: PRODUCTION row has no readable Net Amt")
+            charges.append(VidaCharge("Production", float(amt), p.get("value"), float(amt)))
+        else:
+            g, n = p.get("gross"), p.get("net")
+            if g is None or n is None:
+                raise VidaParseError(
+                    "Vida xlsx: PRODUCTION row needs both Proposed GROSS and Net Amt"
+                )
+            if abs(g * keep - n) > 0.01:
+                raise VidaParseError(
+                    f"Vida xlsx: PRODUCTION net ${n:,.2f} is not gross ${g:,.2f} less "
+                    f"{agency_pct:g}% (${g * keep:,.2f})"
+                )
+            charges.append(VidaCharge("Production", round(float(g), 2), p.get("value"), float(n)))
+
+    tm = footer.get("total_money", {})
+    charge_gross = sum(c.amount for c in charges)
+    charge_net = sum(c.billed for c in charges)
+    _money_check("Total Proposed GROSS", tm.get("gross"), round(paid_gross + charge_gross, 2))
+    _money_check("Total Net Amt", tm.get("net"), round(paid_net + charge_net, 2))
+
+    # ── Investment Summary by language ──
+    for label, (sg, sn) in summary.items():
+        if label.startswith("total"):
+            _money_check("Summary Total gross", sg, round(paid_gross + charge_gross, 2))
+            _money_check("Summary Total net", sn, round(paid_net + charge_net, 2))
+            continue
+        if label.startswith("production"):
+            _money_check("Summary Production gross", sg, round(charge_gross, 2))
+            _money_check("Summary Production net", sn, round(charge_net, 2))
+            continue
+        mine = [ln for ln in paid if ln.language.lower() == label or label in ln.program.lower()]
+        if not mine and not (
+            label.startswith("chinese")
+            and any(ln.language in ("Mandarin", "Cantonese") for ln in paid)
+        ):
+            if (sg or 0) or (sn or 0):
+                raise VidaParseError(
+                    f"Vida xlsx: summary row {label!r} ${sg or 0:,.2f} / ${sn or 0:,.2f} "
+                    "matches no airtime row"
+                )
+            continue
+        if label.startswith("chinese"):
+            mine = [ln for ln in paid if ln.language in ("Mandarin", "Cantonese", "Chinese")]
+        _money_check(
+            f"Summary {label} gross", sg, round(sum(ln.gross_total or 0 for ln in mine), 2)
+        )
+        _money_check(f"Summary {label} net", sn, round(sum(ln.net_total or 0 for ln in mine), 2))
+
+    # ── Flight ranges from the phase labels (else the PDF rule: first Monday → month end) ──
+    if phases:
+        ranges, labels = _phase_ranges(phases, week_dates)
+    else:
+        last = week_dates[-1]
+        nm = date(last.year + (last.month == 12), last.month % 12 + 1, 1)
+        ranges, labels = [(week_dates[0], nm - timedelta(days=1))], [""]
+
+    page = {
+        "hdr": hdr,
+        "week_dates": week_dates,
+        "ranges": ranges,
+        "phases": labels,
+        "lines": parsed,
+        "charges": charges,
+        "page": 1,
+    }
+    return page, rates_are_net, agency_pct, notes
+
+
+def parse_vida_xlsx(path: str) -> VidaOrder:
+    """Parse the Excel form of the Vida proposal (one grid sheet)."""
+    page, rates_are_net, agency_pct, notes = _read_sheet(_sheet_rows(path), path)
+    return _assemble([page], path, rates_are_net=rates_are_net, agency_pct=agency_pct, notes=notes)
+
+
+def parse_vida(path: str) -> VidaOrder:
+    """One order type, one dispatcher, two readers (the Crispin rule)."""
+    if str(path).lower().endswith((".xlsx", ".xlsm")):
+        return parse_vida_xlsx(path)
+    return parse_vida_pdf(path)
+
+
+def is_vida_xlsx_cell(text: str) -> bool:
+    """Scanner cell rule: the agency's own name in a workbook cell."""
+    return "VIDA AGENCY" in " ".join((text or "").split()).upper()
 
 
 def is_vida_text(text: str) -> bool:

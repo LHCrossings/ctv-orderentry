@@ -65,7 +65,7 @@ class OrderType(Enum):
     ILLOTTERY = "illottery"  # Illinois Lottery via Flowers Communications — house proposal PDF, GROSS, agency 353 @ 15%, CMP
     GAUGER = "gauger"  # Gauger + Associates — NET "Broadcast Order" PDF, agency 262 @ 15% (Shea Homes, SFO)
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
-    VIDA = "vida"  # The Vida Agency / Puget Sound Energy — house proposal PDF, NET, agency 260 @ 0%, SEA
+    VIDA = "vida"  # The Vida Agency — house proposal PDF (PSE, NET @ 0%) or xlsx (WA HBE, GROSS @ 15%), agency 260, SEA
     SNOQUALMIE = "snoqualmie"  # Snoqualmie Casino & Hotel — house proposal PDF, PROMO rates, direct 417 @ 0%, SEA
     VIEWPOINT = "viewpoint"  # Viewpoint Ads — Charmaine's political option sheet, GROSS, agency 486 @ 15%, SFO
     HARRAHS = "harrahs"  # Harrah's Northern California — house Monthly Estimate xlsx, PROMO rates, direct 485 @ 0%, CVC
