@@ -28,6 +28,11 @@ Line Description Format:
 
 Contract Code:    "Intertrend CALLOT {estimate}"  e.g. "Intertrend CALLOT 28"  (no leading zeros)
 Description:      "CA State Lottery Est {estimate} - {product}"  e.g. "CA State Lottery Est 28 - Late Spring Scratchers"
+Customer ref:     "Est {estimate}, Order {order}"   e.g. "Est 31, Order 802"
+Notes:            "{product_code} {product}" + the cover page's Order Comments (station,
+                  flight period, per-month Net / Gross). Intertrend invoices EXACTLY the
+                  monthly amounts printed there, which the spot math cannot always hit,
+                  so Lee adjusts those months by hand and needs the amounts on the header.
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -41,7 +46,7 @@ from typing import Optional
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
-_src_path = _project_root / 'src'
+_src_path = _project_root / "src"
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
@@ -49,6 +54,8 @@ from etere_client import EtereClient
 
 from browser_automation.parsers.intertrend_parser import (
     IntertrendOrder,
+    default_contract_note,
+    default_customer_ref,
     format_time_for_description,
     parse_intertrend_pdf,
 )
@@ -58,14 +65,15 @@ from src.domain.enums import BillingType
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _parse_date_ymd(date_str: str) -> date:
     """Convert YYYY-MM-DD string to date object."""
-    return datetime.strptime(date_str, '%Y-%m-%d').date()
+    return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
 def _parse_date_mdy(date_str: str) -> date:
     """Convert MM/DD/YYYY string to date object."""
-    return datetime.strptime(date_str, '%m/%d/%Y').date()
+    return datetime.strptime(date_str, "%m/%d/%Y").date()
 
 
 def _secs_to_duration(seconds: int) -> str:
@@ -77,7 +85,7 @@ def _secs_to_duration(seconds: int) -> str:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_CUSTOMER_ID = 280          # California State Lottery in Etere
+_CUSTOMER_ID = 280  # California State Lottery in Etere
 _DEFAULT_AGENCY_FEE = 15.0  # percent
 _SEPARATION = (25, 0, 0)
 _BILLING = BillingType.CUSTOMER_SHARE_AGENCY
@@ -87,114 +95,123 @@ _BILLING = BillingType.CUSTOMER_SHARE_AGENCY
 # UPFRONT INPUT COLLECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def gather_intertrend_inputs(pdf_path: str) -> dict:
     """
     Parse the PDF and collect all inputs before browser automation starts.
 
     Returns a dict ready for process_intertrend_order().
     """
-    print('\n' + '=' * 70)
-    print('INTERTREND ORDER — UPFRONT INPUT COLLECTION')
-    print('=' * 70)
+    print("\n" + "=" * 70)
+    print("INTERTREND ORDER — UPFRONT INPUT COLLECTION")
+    print("=" * 70)
 
-    print('\n[PARSE] Reading PDF...')
+    print("\n[PARSE] Reading PDF...")
     try:
         order = parse_intertrend_pdf(pdf_path)
     except Exception as e:
-        print(f'[PARSE] ✗ Failed: {e}')
+        print(f"[PARSE] ✗ Failed: {e}")
         return None
 
-    print(f'[PARSE] ✓ Order:    {order.order_number}')
-    print(f'[PARSE] ✓ Client:   {order.client} ({order.client_code})')
-    print(f'[PARSE] ✓ Product:  {order.product} ({order.product_code})')
-    print(f'[PARSE] ✓ Estimate: {order.estimate}')
-    print(f'[PARSE] ✓ Market:   {order.market}')
-    print(f'[PARSE] ✓ Flight:   {order.flight_start} – {order.flight_end}')
-    print(f'[PARSE] ✓ Weeks:    {", ".join(order.week_start_dates)}')
-    print(f'[PARSE] ✓ Lines:    {len(order.lines)}')
+    print(f"[PARSE] ✓ Order:    {order.order_number}")
+    print(f"[PARSE] ✓ Client:   {order.client} ({order.client_code})")
+    print(f"[PARSE] ✓ Product:  {order.product} ({order.product_code})")
+    print(f"[PARSE] ✓ Estimate: {order.estimate}")
+    print(f"[PARSE] ✓ Market:   {order.market}")
+    print(f"[PARSE] ✓ Flight:   {order.flight_start} – {order.flight_end}")
+    print(f"[PARSE] ✓ Weeks:    {', '.join(order.week_start_dates)}")
+    print(f"[PARSE] ✓ Lines:    {len(order.lines)}")
 
     # Show line summary
     print()
     for line in order.lines:
-        tag = ' [BNS]' if line.is_bonus else ''
+        tag = " [BNS]" if line.is_bonus else ""
         time_fmt = format_time_for_description(line.time)
-        print(f'  Line {line.line_number}: {line.days} {time_fmt} :{line.duration} {line.dp_code}{tag}'
-              f'  — {line.total_spots} spots @ ${line.net_rate:.2f} net')
-        print(f'           Weekly: {line.weekly_spots}')
+        print(
+            f"  Line {line.line_number}: {line.days} {time_fmt} :{line.duration} {line.dp_code}{tag}"
+            f"  — {line.total_spots} spots @ ${line.net_rate:.2f} net"
+        )
+        print(f"           Weekly: {line.weekly_spots}")
 
     # ─── Gross-up ───────────────────────────────────────────────────────────
-    print('\n[GROSS-UP] Rates in this IO are NET. Agency fee must be applied.')
-    print(f'Agency fee % [{_DEFAULT_AGENCY_FEE}]: ', end='')
+    print("\n[GROSS-UP] Rates in this IO are NET. Agency fee must be applied.")
+    print(f"Agency fee % [{_DEFAULT_AGENCY_FEE}]: ", end="")
     raw = input().strip()
     agency_fee = float(raw) if raw else _DEFAULT_AGENCY_FEE
     gross_up_factor = 1.0 / (1.0 - agency_fee / 100.0)
-    print(f'[GROSS-UP] Factor: {gross_up_factor:.6f}  (÷{1 - agency_fee/100:.2f})')
+    print(f"[GROSS-UP] Factor: {gross_up_factor:.6f}  (÷{1 - agency_fee / 100:.2f})")
 
     # Verify expected gross amounts
     paid_lines = [ln for ln in order.lines if not ln.is_bonus]
     net_total = sum(ln.net_rate * ln.total_spots for ln in paid_lines)
     gross_total = net_total * gross_up_factor
-    print(f'[GROSS-UP] Net total: ${net_total:,.2f}  →  Gross total: ${gross_total:,.2f}')
+    print(f"[GROSS-UP] Net total: ${net_total:,.2f}  →  Gross total: ${gross_total:,.2f}")
 
     # ─── Customer ────────────────────────────────────────────────────────────
-    print(f'\n[CUSTOMER] California State Lottery → Etere ID {_CUSTOMER_ID}')
-    print(f'Customer ID [{_CUSTOMER_ID}]: ', end='')
+    print(f"\n[CUSTOMER] California State Lottery → Etere ID {_CUSTOMER_ID}")
+    print(f"Customer ID [{_CUSTOMER_ID}]: ", end="")
     raw = input().strip()
     customer_id = int(raw) if raw else _CUSTOMER_ID
 
     # ─── Contract code / description ─────────────────────────────────────────
     est_num = str(int(order.estimate)) if order.estimate.isdigit() else order.estimate
-    default_code = f'Intertrend CALLOT {est_num}'
-    default_desc = f'CA State Lottery Est {est_num} - {order.product}'
+    default_code = f"Intertrend CALLOT {est_num}"
+    default_desc = f"CA State Lottery Est {est_num} - {order.product}"
 
-    print(f'\n[CONTRACT] Code [{default_code}]: ', end='')
+    print(f"\n[CONTRACT] Code [{default_code}]: ", end="")
     raw = input().strip()
     contract_code = raw if raw else default_code
 
-    print(f'[CONTRACT] Description [{default_desc}]: ', end='')
+    print(f"[CONTRACT] Description [{default_desc}]: ", end="")
     raw = input().strip()
     contract_description = raw if raw else default_desc
 
     # ─── Order ref / notes ───────────────────────────────────────────────────
-    default_ref = f'Order {order.order_number}, Est {est_num}'
-    print(f'[REF] Customer order ref [{default_ref}]: ', end='')
+    default_ref = default_customer_ref(order)
+    print(f"[REF] Customer order ref [{default_ref}]: ", end="")
     raw = input().strip()
     customer_order_ref = raw if raw else default_ref
 
-    print('[NOTES] Notes (optional): ', end='')
-    notes = input().strip()
+    default_note = default_contract_note(order)
+    print("[NOTES] Contract notes (product + the IO's Order Comments):")
+    for ln in default_note.splitlines():
+        print(f"    {ln}")
+    print("[NOTES] Enter = keep as shown, or type a replacement: ", end="")
+    raw = input().strip()
+    notes = raw if raw and raw.lower() not in ("y", "yes") else default_note
 
-    print('\n' + '=' * 70)
-    print('READY TO ENTER:')
-    print(f'  Code:    {contract_code}')
-    print(f'  Desc:    {contract_description}')
-    print(f'  Market:  {order.market}')
-    print(f'  Flight:  {order.flight_start} – {order.flight_end}')
-    print(f'  Lines:   {len(order.lines)}')
-    print(f'  Gross-up factor: {gross_up_factor:.4f}')
-    print('=' * 70)
-    print('\nProceed? (Enter = yes, N = abort): ', end='')
-    if input().strip().upper() == 'N':
-        print('[ABORT] User cancelled.')
+    print("\n" + "=" * 70)
+    print("READY TO ENTER:")
+    print(f"  Code:    {contract_code}")
+    print(f"  Desc:    {contract_description}")
+    print(f"  Market:  {order.market}")
+    print(f"  Flight:  {order.flight_start} – {order.flight_end}")
+    print(f"  Lines:   {len(order.lines)}")
+    print(f"  Gross-up factor: {gross_up_factor:.4f}")
+    print("=" * 70)
+    print("\nProceed? (Enter = yes, N = abort): ", end="")
+    if input().strip().upper() == "N":
+        print("[ABORT] User cancelled.")
         return None
 
     return {
-        'order': order,
-        'customer_id': customer_id,
-        'market': order.market,
-        'gross_up_factor': gross_up_factor,
-        'contract_code': contract_code,
-        'contract_description': contract_description,
-        'customer_order_ref': customer_order_ref,
-        'notes': notes,
-        'billing': _BILLING,
-        'separation': _SEPARATION,
+        "order": order,
+        "customer_id": customer_id,
+        "market": order.market,
+        "gross_up_factor": gross_up_factor,
+        "contract_code": contract_code,
+        "contract_description": contract_description,
+        "customer_order_ref": customer_order_ref,
+        "notes": notes,
+        "billing": _BILLING,
+        "separation": _SEPARATION,
     }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DIRECT DB ENTRY
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> Optional[int]:
     """Enter Intertrend order directly via DB stored procedures (no browser).
@@ -204,10 +221,10 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
 
     from browser_automation.etere_direct_client import EtereDirectClient, connect
 
-    customer_id     = inputs.get('customer_id', _CUSTOMER_ID)
-    gross_up_factor = inputs.get('gross_up_factor', 1.0 / (1.0 - _DEFAULT_AGENCY_FEE / 100.0))
-    market          = inputs.get('market', order.market)
-    separation      = inputs.get('separation', _SEPARATION)
+    customer_id = inputs.get("customer_id", _CUSTOMER_ID)
+    gross_up_factor = inputs.get("gross_up_factor", 1.0 / (1.0 - _DEFAULT_AGENCY_FEE / 100.0))
+    market = inputs.get("market", order.market)
+    separation = inputs.get("separation", _SEPARATION)
 
     conn = None
     try:
@@ -216,15 +233,15 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
         client.set_master_market("NYC")
 
         contract_id = client.create_contract_header(
-            code=inputs['contract_code'],
-            description=inputs['contract_description'],
+            code=inputs["contract_code"],
+            description=inputs["contract_description"],
             customer_id=int(customer_id),
             contract_date=_parse_date_ymd(order.flight_start),
             contract_end_date=_parse_date_ymd(order.flight_end),
             contract_type=1,
             billing_type="agency",
-            note=inputs.get('notes', ''),
-            customer_order_ref=inputs.get('customer_order_ref', ''),
+            note=inputs.get("notes", ""),
+            customer_order_ref=inputs.get("customer_order_ref", ""),
             allow_rename=True,
         )
         if not contract_id:
@@ -233,19 +250,19 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
         print(f"[INTERTREND DIRECT] ✓ Contract header ID={contract_id}")
 
         etere_line_num = 0
-        flight_end_mdy   = datetime.strptime(order.flight_end,   '%Y-%m-%d').strftime('%m/%d/%Y')
-        flight_start_mdy = datetime.strptime(order.flight_start, '%Y-%m-%d').strftime('%m/%d/%Y')
+        flight_end_mdy = datetime.strptime(order.flight_end, "%Y-%m-%d").strftime("%m/%d/%Y")
+        flight_start_mdy = datetime.strptime(order.flight_start, "%Y-%m-%d").strftime("%m/%d/%Y")
 
         for line in order.lines:
-            is_bonus     = line.is_bonus
+            is_bonus = line.is_bonus
             booking_code = 10 if is_bonus else 2
-            rate         = 0.0 if is_bonus else round(float(line.net_rate) * gross_up_factor, 2)
+            rate = 0.0 if is_bonus else round(float(line.net_rate) * gross_up_factor, 2)
 
             time_fmt = format_time_for_description(line.time)
-            desc_parts = [f'(Line {line.line_number})', line.days, time_fmt, 'Chinese']
+            desc_parts = [f"(Line {line.line_number})", line.days, time_fmt, "Chinese"]
             if is_bonus:
-                desc_parts.append('BNS')
-            description = ' '.join(desc_parts)
+                desc_parts.append("BNS")
+            description = " ".join(desc_parts)
 
             adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
             time_from, time_to = EtereClient.parse_time_range(line.time)
@@ -257,14 +274,16 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
             )
 
             for group in week_groups:
-                spots_per_week = group['spots_per_week']
-                num_weeks      = group['weeks']
-                group_total    = spots_per_week * num_weeks
+                spots_per_week = group["spots_per_week"]
+                num_weeks = group["weeks"]
+                group_total = spots_per_week * num_weeks
 
                 etere_line_num += 1
-                print(f"  [LINE {etere_line_num}] {'BNS' if is_bonus else 'COM'} "
-                      f"{group['start_date']}–{group['end_date']} "
-                      f"{num_weeks}wk × {spots_per_week}/wk = {group_total} spots  ${rate:.2f}")
+                print(
+                    f"  [LINE {etere_line_num}] {'BNS' if is_bonus else 'COM'} "
+                    f"{group['start_date']}–{group['end_date']} "
+                    f"{num_weeks}wk × {spots_per_week}/wk = {group_total} spots  ${rate:.2f}"
+                )
 
                 client.add_contract_line(
                     market=market,
@@ -274,8 +293,8 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
                     rate=rate,
                     total_spots=group_total,
                     spots_per_week=spots_per_week,
-                    date_from=_parse_date_mdy(group['start_date']),
-                    date_to=_parse_date_mdy(group['end_date']),
+                    date_from=_parse_date_mdy(group["start_date"]),
+                    date_to=_parse_date_mdy(group["end_date"]),
                     duration=duration_str,
                     is_bonus=is_bonus,
                     booking_code=booking_code,
@@ -290,6 +309,7 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
     except Exception as exc:
         print(f"[INTERTREND DIRECT] ✗ {exc}")
         import traceback
+
         traceback.print_exc()
         if conn:
             try:
@@ -303,6 +323,7 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def process_intertrend_order(pdf_path: str, shared_session=None, pre_gathered_inputs=None) -> bool:
     """
@@ -322,7 +343,7 @@ def process_intertrend_order(pdf_path: str, shared_session=None, pre_gathered_in
         if not user_input:
             return False
 
-    order: IntertrendOrder = user_input['order']
+    order: IntertrendOrder = user_input["order"]
 
     contract_id = _create_intertrend_contract_direct(order, user_input)
     return contract_id is not None
