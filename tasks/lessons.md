@@ -4,6 +4,33 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Slow Path Was Blamed on the One Hop That Differed From the Fast Control — but the Slow Transfers Already Ran on the Fast Control's Hop; Name a Hop Only After a Test That Moves ONLY That Hop, and Measure Loss From the Sender Before Reading Throughput
+
+**Session:** Lee, "FTP from the Datamover to ADSRV01 is slow again" (2026-11-09/10)
+
+**Rule:** Pushes into the office through the BGW210 port forward ran 6-11 Mbit/s while an S3
+download into the same box ran 290 Mbit/s, so I named the port-forward path. Lee pointed the
+FTP client at ADSRV01's Tailscale IP: same speed. The discriminator had been in the FileZilla
+log all along: the client is in ACTIVE mode (PORT), so every slow data channel was opened by
+ADSRV01 OUTBOUND, exactly like the fast S3 download; the forward was never on the slow path.
+The reading that fits every observation is one-direction packet loss between EC2 us-west-2 and
+the AT&T circuit (sender `netstat -s` during a push: 0.8-0.95% retransmits vs 0.03% idle; TCP
+at 29 ms and 1% loss is 5-10 Mbit/s), which S3 traffic does not cross. Same family as 9/15
+("reproduce before naming the actor") and 8/7 ("pull a known-good peer as a control").
+
+**How to apply:**
+1. Before naming a hop, list every element on the slow path and the fast control and check
+   which actually differ; a difference that is NOT on the slow path (the forward here) cannot
+   be the cause. Read the protocol's direction (PORT vs PASV, who connects to whom) first.
+2. A throughput number at a known RTT is a loss measurement in disguise: compute the loss
+   that would produce it (`1.22*MSS/(RTT*sqrt(p))`) and then MEASURE it at the sender
+   (`netstat -s -p tcp` deltas around the transfer, with an idle baseline), before and instead
+   of more throughput runs.
+3. When ICMP is blocked both ways (EC2 egress, BGW210), say the lossy hop cannot be located
+   from here; do not pick one.
+
+---
+
 ## A Plan That Reads the Real Clock Has Tests That Expire — Inject `today`, Pin It to the Day the IO Arrived, and Test the Trim on Its Own
 
 **Session:** Lee, "I'm getting github errors" on a push that touched nothing near Graton (2026-11-03)
