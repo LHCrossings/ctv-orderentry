@@ -28,6 +28,11 @@ at 29 ms and 1% loss is 5-10 Mbit/s), which S3 traffic does not cross. Same fami
    of more throughput runs.
 3. When ICMP is blocked both ways (EC2 egress, BGW210), say the lossy hop cannot be located
    from here; do not pick one.
+4. **Same night, second wrong actor:** the "carrier path" reading died the moment a second
+   office host was used as the control: pushes into EDIT-04 over the same circuit, same minute,
+   same tunnel ran 134-234 Mbit/s while ADSRV01 took 6 Mbit/s at 1% retransmits. Before naming
+   anything upstream of a building, push into a SECOND host in that building. Two controls
+   (a different source, a different destination) are the minimum before a path diagnosis.
 
 ---
 
