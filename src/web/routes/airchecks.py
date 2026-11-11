@@ -38,6 +38,7 @@ MARKET_NAMES = {
 
 PRE_ROLL_SECS = 20
 POST_ROLL_SECS = 30
+LATER_AIRINGS_MAX = 5  # following airings carried per spot row for the per-spot Queue button
 
 
 def _fetch_etere_spots(
@@ -50,6 +51,12 @@ def _fetch_etere_spots(
     """The aircheck spot set for a contract: one row per (ISCI, market) first
     airing, future only (the capture set). `upcoming_only=False` keeps aired
     spots and `first_only=False` keeps every airing (the Order Lookup match set).
+
+    With `first_only`, each row also carries `later_airings`: up to
+    LATER_AIRINGS_MAX of the SAME spot's following upcoming airings, so the
+    page's per-spot Queue button can re-book one spot whose recording was cut
+    off without re-queueing the whole order (Lee, 2611 SEA, 2026-11-11) — it
+    books the row's airing, or the next one not already on the agent.
 
     "Upcoming" is decided in Python, in Pacific time, AFTER each row's
     market-local air time is converted — TPALINSE.ORA is market-local (a WDC
@@ -94,14 +101,19 @@ def _fetch_etere_spots(
     cutoff_pt = now_pt + timedelta(minutes=10)
 
     results = []
-    seen: set[tuple[str, str]] = set()
+    first_rows: dict[tuple[str, str], dict] = {}
     with _db_connect() as conn:
         cur = conn.cursor(as_dict=True)
         cur.execute(sql)
         for row in cur.fetchall():
             network = MARKET_NAMES.get(int(row["market_id"]), f"MKT{row['market_id']}")
             isci = row["isci_code"].strip()
-            if first_only and (isci, network) in seen:
+            first = first_rows.get((isci, network))
+            if (
+                first_only
+                and first is not None
+                and len(first["later_airings"]) >= LATER_AIRINGS_MAX
+            ):
                 continue
 
             air_date = row["air_date"]
@@ -115,8 +127,6 @@ def _fetch_etere_spots(
             air_dt = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
             if upcoming_only and air_dt < cutoff_pt:
                 continue  # aired (or about to) — rows are in air order, so the next one is the first upcoming
-            if first_only:
-                seen.add((isci, network))
 
             tz_abbr = air_dt_loc.strftime("%Z")
             h12 = air_dt_loc.hour % 12 or 12
@@ -125,26 +135,35 @@ def _fetch_etere_spots(
                 f"{air_dt_loc.month}/{air_dt_loc.day} at "
                 f"{h12}:{air_dt_loc.strftime('%M:%S')}{ampm} {tz_abbr}"
             )
+            airing = {
+                "air_ora": int(row["air_ora"]),
+                "air_datetime": air_dt.isoformat(),
+                "air_datetime_local": local_display,
+                "capture_start": (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
+            }
+
+            if first_only and first is not None:
+                first["later_airings"].append(airing)  # same spot, a later airing
+                continue
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
             client_name = (row.get("client_name") or "").strip() or None
             customer_ref = (row.get("customer_ref") or "").strip() or None
 
-            results.append(
-                {
-                    "isci_code": isci,
-                    "air_ora": int(row["air_ora"]),
-                    "client_name": client_name,
-                    "customer_ref": customer_ref,
-                    "network": network,
-                    "air_datetime": air_dt.isoformat(),
-                    "air_datetime_local": local_display,
-                    "duration_seconds": dur_secs,
-                    "capture_start": (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
-                    "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
-                }
-            )
+            spot = {
+                "isci_code": isci,
+                "client_name": client_name,
+                "customer_ref": customer_ref,
+                "network": network,
+                "duration_seconds": dur_secs,
+                "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
+                **airing,
+            }
+            if first_only:
+                spot["later_airings"] = []
+                first_rows[(isci, network)] = spot
+            results.append(spot)
 
     return results
 

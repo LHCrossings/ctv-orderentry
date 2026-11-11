@@ -985,20 +985,26 @@ function renderSpots() {
     let html = `<table>
         <thead><tr>
             <th>ISCI Code</th><th>Network</th><th>Earliest Air</th>
-            <th>Spot</th><th>Capture Window</th>
+            <th>Spot</th><th>Capture Window</th><th></th>
         </tr></thead><tbody>`;
 
-    etereSpots.forEach(s => {
+    etereSpots.forEach((s, i) => {
         const start  = new Date(s.capture_start);
         const end    = new Date(start.getTime() + s.capture_duration_seconds * 1000);
         const tFmt   = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
         const window = `${start.toLocaleTimeString('en-US', tFmt)} – ${end.toLocaleTimeString('en-US', tFmt)}`;
+        const later  = (s.later_airings || []).length;
         html += `<tr>
             <td><span class="isci-code">${escHtml(s.isci_code)}</span></td>
             <td>${escHtml(s.network)}</td>
             <td>${escHtml(s.air_datetime_local)}</td>
             <td style="font-family:monospace;">:${String(s.duration_seconds).padStart(2,'0')}</td>
             <td class="capture-window">${window}</td>
+            <td style="white-space:nowrap">
+                <button class="action-btn btn-edit spot-queue-btn" data-idx="${i}"
+                    title="Queue this one spot: this airing, or the next airing not already queued${later ? ` (${later} later airing${later !== 1 ? 's' : ''} known)` : ''}">⏺ Queue</button>
+                <span class="submit-msg" id="spotMsg${i}"></span>
+            </td>
         </tr>`;
     });
 
@@ -1011,6 +1017,68 @@ function renderSpots() {
         </div>`;
 
     area.innerHTML = html;
+    // data-idx, never an inline onclick built from interpolated data (7/20 lesson)
+    area.querySelectorAll('.spot-queue-btn').forEach(btn =>
+        btn.addEventListener('click', () => queueOneSpot(+btn.dataset.idx)));
+}
+
+// Dedup key shared with scheduleAllSpots and the server's auto-schedule:
+// (ISCI, network, capture start to the minute).
+function captureKey(isci, network, start) {
+    return `${String(isci || '').trim().toUpperCase()}|${network}|${String(start || '').slice(0, 16)}`;
+}
+
+async function queuedCaptureKeys() {
+    const r = await fetch(`${AGENT}/captures`, { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error('agent unreachable');
+    return new Set((await r.json()).map(c => captureKey(c.isci_code, c.network, c.start_time)));
+}
+
+async function postCapture(s, airing) {
+    const resp = await fetch(`${AGENT}/captures`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            client:           s.client_name || s.isci_code,
+            network:          s.network,
+            duration_seconds: s.capture_duration_seconds,
+            start_time:       airing.capture_start,
+            notes:            s.customer_ref || selectedContract.code,
+            isci_code:        s.isci_code,
+            original_ora:     airing.air_ora,
+        }),
+    });
+    return resp.ok;
+}
+
+// Re-queue ONE spot after a cut-off recording was deleted: book the row's
+// airing, or — when that one is already on the agent — the spot's next
+// airing that is not. Never touches the other spots of the order.
+async function queueOneSpot(i) {
+    const s = etereSpots[i];
+    if (!s || !selectedContract) return;
+    const btn = document.querySelector(`.spot-queue-btn[data-idx="${i}"]`);
+    const msg = document.getElementById(`spotMsg${i}`);
+    btn.disabled = true;
+    try {
+        const queued = await queuedCaptureKeys();
+        const candidates = [s, ...(s.later_airings || [])];
+        const pick = candidates.find(a => !queued.has(captureKey(s.isci_code, s.network, a.capture_start)));
+        if (!pick) {
+            flash(msg, `All ${candidates.length} known airings are already queued.`, false);
+            return;
+        }
+        if (!(await postCapture(s, pick))) throw new Error('agent refused');
+        const skipped = candidates.indexOf(pick);
+        flash(msg, `✓ Queued ${pick.air_datetime_local}` +
+            (skipped ? ` (${skipped} earlier airing${skipped !== 1 ? 's' : ''} already queued)` : ''), true);
+        await loadCaptures();
+        startPolling();
+    } catch (e) {
+        flash(msg, `Failed — ${e.message}. Check Datamover connection.`, false);
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 async function scheduleAllSpots() {
@@ -1022,32 +1090,15 @@ async function scheduleAllSpots() {
     // Same dedup key as the server's auto-schedule (ISCI, network, start-to-minute):
     // a second click on Schedule All must not book a second recording.
     let queued = new Set();
-    try {
-        const r = await fetch(`${AGENT}/captures`, { signal: AbortSignal.timeout(4000) });
-        if (r.ok) (await r.json()).forEach(c => queued.add(
-            `${String(c.isci_code || '').trim().toUpperCase()}|${c.network}|${String(c.start_time || '').slice(0, 16)}`));
-    } catch {}
+    try { queued = await queuedCaptureKeys(); } catch {}
 
     let ok = 0, fail = 0, skipped = 0;
     for (const s of etereSpots) {
         btn.textContent = `Scheduling ${ok + fail + skipped + 1} of ${etereSpots.length}…`;
-        const key = `${s.isci_code.trim().toUpperCase()}|${s.network}|${s.capture_start.slice(0, 16)}`;
+        const key = captureKey(s.isci_code, s.network, s.capture_start);
         if (queued.has(key)) { skipped++; continue; }
         try {
-            const resp = await fetch(`${AGENT}/captures`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    client:           s.client_name || s.isci_code,
-                    network:          s.network,
-                    duration_seconds: s.capture_duration_seconds,
-                    start_time:       s.capture_start,
-                    notes:            s.customer_ref || selectedContract.code,
-                    isci_code:        s.isci_code,
-                    original_ora:     s.air_ora,
-                }),
-            });
-            if (resp.ok) { ok++; queued.add(key); } else { fail++; }
+            if (await postCapture(s, s)) { ok++; queued.add(key); } else { fail++; }
         } catch { fail++; }
     }
 

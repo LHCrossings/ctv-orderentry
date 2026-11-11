@@ -111,3 +111,49 @@ def test_cutoff_is_ten_minutes_ahead_in_pacific():
 def test_every_airing_when_not_first_only_still_drops_aired_rows():
     _, out = _run(ROWS, first_only=False, now_pt=NOW_PT)
     assert len(out) == 4 and all(s["air_datetime"] > "2026-10-27T19:25" for s in out)
+
+
+# ── per-spot re-queue: later_airings (Lee, 2611 SEA, 2026-11-11) ──────────────
+# A cut-off recording is deleted and ONE spot has to be re-booked; the page's
+# per-row Queue button books the row's airing or the spot's next upcoming airing
+# not already on the agent, so every first row carries its following airings.
+
+
+def test_first_rows_carry_the_same_spots_following_upcoming_airings_only():
+    _, out = _run(ROWS, now_pt=NOW_PT)
+    by_isci = {s["isci_code"]: s for s in out}
+    later = by_isci["MCIM137526VH"]["later_airings"]
+    # 10/27 aired (not a later airing), 10/29 is the row itself, 11/1 follows it
+    assert [a["air_datetime"] for a in later] == ["2026-11-01T18:12:00"]
+    assert later[0]["capture_start"] == "2026-11-01T18:11:40"
+    assert later[0]["air_datetime_local"] == "11/1 at 9:12:00PM EST"
+    assert set(later[0]) == {"air_ora", "air_datetime", "air_datetime_local", "capture_start"}
+    assert by_isci["MCIM136526VH"]["later_airings"] == [
+        {
+            "air_ora": by_isci["MCIM136526VH"]["later_airings"][0]["air_ora"],
+            "air_datetime": "2026-10-30T03:19:00",
+            "air_datetime_local": "10/30 at 6:19:00AM EDT",
+            "capture_start": "2026-10-30T03:18:40",
+        }
+    ]
+    # the row itself is unchanged: still the FIRST upcoming airing
+    assert by_isci["MCIM137526VH"]["air_datetime"] == "2026-10-29T18:18:00"
+
+
+def test_later_airings_are_capped_and_absent_on_the_every_airing_path():
+    rows = [_row("MCIM137526VH", 8, date(2026, 11, d), "21:00") for d in range(1, 12)]
+    _, out = _run(rows, now_pt=NOW_PT)
+    assert len(out) == 1
+    assert len(out[0]["later_airings"]) == airchecks.LATER_AIRINGS_MAX
+    assert out[0]["later_airings"][0]["air_datetime"] == "2026-11-02T18:00:00"
+    _, every = _run(rows, first_only=False, now_pt=NOW_PT)
+    assert len(every) == 11 and not any("later_airings" in s for s in every)
+
+
+def test_a_later_airing_in_another_market_is_its_own_row_not_a_later_airing():
+    rows = [
+        _row("MCIM137526VH", 8, date(2026, 10, 29), "21:18"),
+        _row("MCIM137526VH", 5, date(2026, 10, 30), "22:00"),  # SEA, same ISCI
+    ]
+    _, out = _run(rows, now_pt=NOW_PT)
+    assert [(s["network"], s["later_airings"]) for s in out] == [("WDC", []), ("SEA", [])]
