@@ -831,13 +831,27 @@ def parse_vida_pages(pages: List[str], source_path: str = "") -> VidaOrder:
 
 
 def parse_vida_pdf(path: str) -> VidaOrder:
-    """Parse a Vida Agency proposal PDF (every page — never pages[0] only)."""
+    """Parse a Vida Agency proposal PDF (every page — never pages[0] only).
+
+    Two prints of the house proposal exist: the NET page with a 'Date:' line
+    (Puget Sound Energy, read from its text) and the GROSS sheet with
+    'DISCOUNTED … Proposed GROSS' columns (WA Health Plan Finder, the Excel
+    sheet printed to PDF, read from its ruled grid by `parse_vida_grid_layouts`)."""
     import pdfplumber
 
     pages: List[str] = []
+    layouts: List[tuple[list, list]] = []
     with pdfplumber.open(path) as pdf:
         for p in pdf.pages:
             pages.append(p.extract_text() or "")
+            layouts.append(
+                (
+                    p.extract_words(x_tolerance=GRID_X_TOL, y_tolerance=GRID_Y_TOL),
+                    list(p.rects) + list(p.lines),
+                )
+            )
+    if any(is_vida_grid_text(t) for t in pages):
+        return parse_vida_grid_layouts(layouts, pages, source_path=path)
     return parse_vida_pages(pages, source_path=path)
 
 
@@ -886,6 +900,17 @@ def _int_cell(v, what: str, row_no: int) -> int:
     if abs(f - round(f)) > 1e-9:
         raise VidaParseError(f"Vida xlsx: row {row_no} {what} cell {f} is not a whole number")
     return int(round(f))
+
+
+def _charge_name(name: str) -> str:
+    """'Interview segment ( Mandarin) 4x airtime' → 'Interview segment (Mandarin) 4x airtime'."""
+    t = " ".join(name.lstrip("* ").split())
+    return re.sub(r"\(\s+", "(", re.sub(r"\s+\)", ")", t))
+
+
+def _name_key(name: str) -> str:
+    """Letters and digits only, lower case — the grid and the summary space a name differently."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 def _sheet_rows(path: str) -> List[list]:
@@ -1134,7 +1159,7 @@ def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, 
             footer["bonus"] = cells + [total]
         elif low.startswith("production") and "production" not in footer:
             footer["production"] = money_cells(row, row_no)
-        elif "added value" in left or low.startswith("added value"):
+        elif "added value" in left or low.lstrip("* ").startswith("added value"):
             m = money_cells(row, row_no)
             if (m.get("gross") or 0) or (m.get("net") or 0):
                 raise VidaParseError(
@@ -1142,13 +1167,27 @@ def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, 
                     f"(gross {m.get('gross')}, net {m.get('net')}) — an added-value "
                     "row is $0; refusing to guess whether it is airtime"
                 )
-            notes.append(f"{name} (value ${m.get('value') or 0:,.0f}, $0)")
+            notes.append(f"{_charge_name(name)} (value ${m.get('value') or 0:,.0f}, $0)")
         elif low.startswith("total") and "total" not in footer:
             cells, total = grid_cells(row, row_no)
             footer["total"] = cells + [total]
             footer["total_money"] = money_cells(row, row_no)
             r += 1
             break
+        elif name:
+            # Any other named row below PAID that carries money is a paid
+            # non-airtime item (REV2: "Interview segment (Mandarin) 4x airtime").
+            # A row with week cells down here would be airtime outside the PAID
+            # footer: refuse, never guess.
+            m = money_cells(row, row_no)
+            if (m.get("gross") or 0) or (m.get("net") or 0):
+                cells, total = grid_cells(row, row_no)
+                if any(cells) or total:
+                    raise VidaParseError(
+                        f"Vida xlsx: row {row_no} {name!r} sits below the PAID footer "
+                        "but carries week cells — refusing to guess whether it is airtime"
+                    )
+                footer.setdefault("extra", []).append((row_no, _charge_name(name), m))
         r += 1
     # Investment Summary: a row with 'Gross Amount' / 'Net Amount' labels, then
     # label | gross | net rows until a blank.
@@ -1319,6 +1358,25 @@ def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, 
                 )
             charges.append(VidaCharge("Production", round(float(g), 2), p.get("value"), float(n)))
 
+    for row_no, cname, m in footer.get("extra", []):
+        if rates_are_net:
+            amt = m.get("net")
+            if amt is None:
+                raise VidaParseError(f"Vida xlsx: row {row_no} {cname!r} has no readable Net Amt")
+            charges.append(VidaCharge(cname, float(amt), m.get("value"), float(amt)))
+            continue
+        g, n = m.get("gross"), m.get("net")
+        if g is None or n is None:
+            raise VidaParseError(
+                f"Vida xlsx: row {row_no} {cname!r} needs both Proposed GROSS and Net Amt"
+            )
+        if abs(g * keep - n) > 0.01:
+            raise VidaParseError(
+                f"Vida xlsx: row {row_no} {cname!r} net ${n:,.2f} is not gross ${g:,.2f} "
+                f"less {agency_pct:g}% (${g * keep:,.2f})"
+            )
+        charges.append(VidaCharge(cname, round(float(g), 2), m.get("value"), float(n)))
+
     tm = footer.get("total_money", {})
     charge_gross = sum(c.amount for c in charges)
     charge_net = sum(c.billed for c in charges)
@@ -1332,8 +1390,14 @@ def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, 
             _money_check("Summary Total net", sn, round(paid_net + charge_net, 2))
             continue
         if label.startswith("production"):
-            _money_check("Summary Production gross", sg, round(charge_gross, 2))
-            _money_check("Summary Production net", sn, round(charge_net, 2))
+            prod = [c for c in charges if c.description == "Production"]
+            _money_check("Summary Production gross", sg, round(sum(c.amount for c in prod), 2))
+            _money_check("Summary Production net", sn, round(sum(c.billed for c in prod), 2))
+            continue
+        named = [c for c in charges if _name_key(c.description) == _name_key(label)]
+        if named:
+            _money_check(f"Summary {label} gross", sg, round(sum(c.amount for c in named), 2))
+            _money_check(f"Summary {label} net", sn, round(sum(c.billed for c in named), 2))
             continue
         mine = [ln for ln in paid if ln.language.lower() == label or label in ln.program.lower()]
         if not mine and not (
@@ -1373,6 +1437,229 @@ def _read_sheet(rows: List[list], source_path: str) -> tuple[dict, bool, float, 
     return page, rates_are_net, agency_pct, notes
 
 
+# ─── PDF print of the Excel sheet ────────────────────────────────────────────
+#
+# The GROSS sheet printed to PDF keeps every cell border as a hairline
+# rectangle, so the page is read as the SAME grid the workbook holds and handed
+# to `_read_sheet` — one reader for the template, two front ends. Geometry, not
+# text flow, decides the cell of a word:
+#   - a row of the main table is the band between two horizontal rules; outside
+#     the table a row is a text line;
+#   - a cell's left edge is the nearest vertical rule that CROSSES that row; a
+#     rule that stops above the row means the cells are merged ("PAID",
+#     "PRODUCTION (…)" span Programming…DISCOUNTED and land in Programming);
+#   - where the rule between two rows does not reach a column, the cell is
+#     merged down the rows and its content belongs to the upper row (the PAID
+#     row's Value / Proposed GROSS print half a row low).
+# Money prints with stray spaces ("$ 7 0.00", "$ 1 7,647.06"); a cell that is
+# only digits once "$", spaces and commas are removed is a number, "$ -" is
+# empty. Week headers carry no year ("16-Nov"): it comes from the REVISION /
+# Date line, checked against the Monday rule.
+
+GRID_X_TOL = 1.5
+GRID_Y_TOL = 2
+_RULE_THIN = 1.5  # a border is a rectangle thinner than this (they print 0.2-0.4 pt)
+_RULE_MIN_LEN = 3.0
+_EDGE_TOL = 1.5  # two rule ends within this are the same edge
+_LINE_TOL = 2.0  # text lines outside the table: rows are >= 5 pt apart, jitter < 0.5
+_GRID_NUM_RE = re.compile(r"^\d+(?:\.\d+)?$")
+
+
+def is_vida_grid_text(text: str) -> bool:
+    """A page whose header row reads 'Programming … DISCOUNTED … Proposed GROSS'."""
+    for line in (text or "").splitlines():
+        low = " ".join(line.split()).lower()
+        if low.startswith("programming") and "discounted" in low and "gross" in low:
+            return True
+    return False
+
+
+def _cluster(values: List[float], tol: float) -> List[float]:
+    """Sorted raw floats → cluster centres (never round() first: 7/01 lesson)."""
+    out: List[List[float]] = []
+    for v in sorted(values):
+        if out and v - out[-1][-1] <= tol:
+            out[-1].append(v)
+        else:
+            out.append([v])
+    return [sum(c) / len(c) for c in out]
+
+
+def _grid_value(text: str):
+    """Cell text → float for a number, None for '$ -', else the text."""
+    bare = text.replace("$", "").replace(",", "").replace(" ", "")
+    if bare == "-" and "$" in text:
+        return None
+    if _GRID_NUM_RE.match(bare) and not re.search(r"[A-Za-z/:%]", text):
+        return float(bare)
+    return text
+
+
+def _layout_rows(words: List[dict], rules: List[dict], page_no: int = 1) -> List[list]:
+    """One page's words + border rectangles → rows of cell values, the shape
+    `_sheet_rows` returns for the workbook."""
+    vert = [
+        r
+        for r in rules
+        if abs(r["x1"] - r["x0"]) < _RULE_THIN and r["bottom"] - r["top"] >= _RULE_MIN_LEN
+    ]
+    horiz = [
+        r
+        for r in rules
+        if r["bottom"] - r["top"] < _RULE_THIN and abs(r["x1"] - r["x0"]) >= _RULE_MIN_LEN
+    ]
+    head = [w for w in words if w["text"].lower() == "programming"]
+    if not head:
+        raise VidaParseError(f"Vida PDF: page {page_no} has no 'Programming' header word")
+    hy = (head[0]["top"] + head[0]["bottom"]) / 2
+    crossing = [v for v in vert if v["top"] - _EDGE_TOL <= hy <= v["bottom"] + _EDGE_TOL]
+    if len(crossing) < 4:
+        raise VidaParseError(
+            f"Vida PDF: page {page_no} has no ruled grid around the 'Programming' header "
+            f"({len(crossing)} column borders) — this print cannot be read by cell; "
+            "use the Excel file"
+        )
+    t_top = min(v["top"] for v in crossing)
+    t_bot = max(v["bottom"] for v in crossing)
+    col_x = _cluster([(v["x0"] + v["x1"]) / 2 for v in vert], _EDGE_TOL)
+
+    def col_index(x: float) -> int:
+        return sum(1 for c in col_x if c <= x + _EDGE_TOL)
+
+    in_table = [
+        h for h in horiz if t_top - _EDGE_TOL <= (h["top"] + h["bottom"]) / 2 <= t_bot + _EDGE_TOL
+    ]
+    ys = _cluster([(h["top"] + h["bottom"]) / 2 for h in in_table], _EDGE_TOL)
+    if len(ys) < 3:
+        raise VidaParseError(f"Vida PDF: page {page_no} grid has no row borders")
+    segs: List[List[tuple[float, float]]] = [[] for _ in ys]
+    for h in in_table:
+        y = (h["top"] + h["bottom"]) / 2
+        k = min(range(len(ys)), key=lambda i: abs(ys[i] - y))
+        segs[k].append((min(h["x0"], h["x1"]), max(h["x0"], h["x1"])))
+
+    def ruled(k: int, x: float) -> bool:
+        return any(a - _EDGE_TOL <= x <= b + _EDGE_TOL for a, b in segs[k])
+
+    def left_edge(y: float, x: float) -> Optional[float]:
+        """x of the nearest border left of x among the verticals crossing y."""
+        xs = [
+            (v["x0"] + v["x1"]) / 2
+            for v in vert
+            if v["top"] - _EDGE_TOL <= y <= v["bottom"] + _EDGE_TOL and (v["x0"] + v["x1"]) / 2 <= x
+        ]
+        return max(xs) if xs else None
+
+    cells: dict = {}  # (row key, column) → [(x0, text)]
+    loose: List[dict] = []
+    for w in words:
+        cx, cy = (w["x0"] + w["x1"]) / 2, (w["top"] + w["bottom"]) / 2
+        band = next((k for k in range(len(ys) - 1) if ys[k] <= cy < ys[k + 1]), None)
+        if band is None:
+            loose.append(w)
+            continue
+        edge = left_edge((ys[band] + ys[band + 1]) / 2, cx)
+        # Merged down the rows: no rule above this cell although the table is
+        # ruled at this x elsewhere → the content belongs to the row above.
+        while band > 0 and not ruled(band, cx) and any(ruled(k, cx) for k in range(len(ys))):
+            band -= 1
+        col = 0 if edge is None else col_index(edge)
+        cells.setdefault((ys[band], col), []).append((w["x0"], w["text"]))
+    line_tops = _cluster([w["top"] for w in loose], _LINE_TOL)
+    for w in loose:
+        top = min(line_tops, key=lambda t: abs(t - w["top"]))
+        cx, cy = (w["x0"] + w["x1"]) / 2, (w["top"] + w["bottom"]) / 2
+        edge = left_edge(cy, cx)
+        col = 0 if edge is None else col_index(edge)
+        cells.setdefault((top, col), []).append((w["x0"], w["text"]))
+
+    width = len(col_x) + 2
+    rows: List[list] = []
+    for key in sorted({k for k, _c in cells}):
+        row: list = [None] * width
+        for (k, col), parts in cells.items():
+            if k == key:
+                row[col] = " ".join(t for _x, t in sorted(parts))
+        filled = [i for i, v in enumerate(row) if v is not None]
+        first = row[filled[0]].split(" ", 1)
+        if len(filled) == 1 and len(first) == 2 and first[0].lower().rstrip(":") in _SHEET_LABELS:
+            # "REVISION 11/2/2026" prints in one unruled box: label | value
+            row[filled[0]], row[filled[0] + 1] = first[0], first[1]
+        else:
+            row = [v if v is None else _grid_value(v) for v in row]
+        rows.append(row)
+    return rows
+
+
+def _date_week_headers(rows: List[list], page_no: int) -> None:
+    """'16-Nov' header cells → dates, in place. The year is the REVISION / Date
+    line's, or the next / previous one when only that makes every week a Monday."""
+    hidx = _header_row_index(rows)
+    if hidx is None:
+        raise VidaParseError(f"Vida PDF: page {page_no} has no 'Programming … Total Units' row")
+    labels = []
+    for i, c in enumerate(rows[hidx]):
+        m = _WEEK_LABEL_RE.match(c) if isinstance(c, str) else None
+        if m:
+            mon = _MONTHS.get(m.group(2).lower())
+            if mon is None:
+                raise VidaParseError(f"Vida PDF: page {page_no} week header {c!r} names no month")
+            labels.append((i, (mon, int(m.group(1)))))
+    if not labels:
+        raise VidaParseError(f"Vida PDF: page {page_no} header row names no week columns")
+    base = None
+    for row in rows[:hidx]:
+        for i, c in enumerate(row):
+            if isinstance(c, str) and c.lower().rstrip(": ") in ("date", "revision"):
+                base = base or _as_date(next((v for v in row[i + 1 :] if v is not None), None))
+    if base is None:
+        raise VidaParseError(
+            f"Vida PDF: page {page_no} has no 'Date:' / 'REVISION' date — "
+            "the week columns cannot be given a year"
+        )
+    md = [x for _i, x in labels]
+    dates = _resolve_dates(md, base.year, md[0][0])
+    for year in (base.year, base.year + 1, base.year - 1):
+        try:
+            trial = _resolve_dates(md, year, md[0][0])
+        except ValueError:
+            continue
+        if all(d.weekday() == 0 for d in trial):
+            dates = trial
+            break
+    for (i, _md), d in zip(labels, dates):
+        rows[hidx][i] = d
+
+
+def parse_vida_grid_layouts(
+    layouts: List[tuple[list, list]], texts: List[str], source_path: str = ""
+) -> VidaOrder:
+    """[(words, border rectangles)] per page → VidaOrder (testable without pdfplumber).
+    Exactly one page may carry the grid; a second one refuses by page number."""
+    grid_pages = [i for i, t in enumerate(texts) if is_vida_grid_text(t)]
+    if len(grid_pages) != 1:
+        raise VidaParseError(
+            "Vida PDF: pages "
+            + ", ".join(str(i + 1) for i in grid_pages)
+            + " each carry a 'Programming … Proposed GROSS' grid — one sheet per file is "
+            "the only shape read so far; refusing to enter one page of several"
+        )
+    i = grid_pages[0]
+    words, rules = layouts[i]
+    rows = _layout_rows(words, rules, i + 1)
+    _date_week_headers(rows, i + 1)
+    try:
+        page, rates_are_net, agency_pct, notes = _read_sheet(rows, source_path)
+    except VidaParseError as e:
+        # `_read_sheet` words its refusals for the workbook; the row numbers
+        # here count the page's rows from the top.
+        raise VidaParseError(str(e).replace("Vida xlsx:", f"Vida PDF page {i + 1}:")) from None
+    page["page"] = i + 1
+    return _assemble(
+        [page], source_path, rates_are_net=rates_are_net, agency_pct=agency_pct, notes=notes
+    )
+
+
 def parse_vida_xlsx(path: str) -> VidaOrder:
     """Parse the Excel form of the Vida proposal (one grid sheet)."""
     page, rates_are_net, agency_pct, notes = _read_sheet(_sheet_rows(path), path)
@@ -1380,7 +1667,8 @@ def parse_vida_xlsx(path: str) -> VidaOrder:
 
 
 def parse_vida(path: str) -> VidaOrder:
-    """One order type, one dispatcher, two readers (the Crispin rule)."""
+    """One order type, one dispatcher (the Crispin rule): the workbook, or the
+    PDF in either of its two prints (`parse_vida_pdf`)."""
     if str(path).lower().endswith((".xlsx", ".xlsm")):
         return parse_vida_xlsx(path)
     return parse_vida_pdf(path)
