@@ -1255,3 +1255,15 @@ Cantonese "7p-8p; 11:30p-12a" = ONE 7p-12a line pruned to the five "C -" blocks;
       `Vida WAHBE 2612` 16 lines / 238 spots / $7,640 (454 = the sheet's Total), 15%, ref Phase N,
       Cantonese line 5 "C -" blocks (8 M dropped), all Rotation; rolled back
 - [ ] Lee enters from the queue
+
+## Fill & Finish: "done by hand" mark (Ashe's request, 2026-11-19)
+
+Lee's rules: the Finish button stays on a marked show; the mark names who set it; the mark clears itself when the show is changed.
+
+- [x] Store: `dbo.CTV_FinishHandMarks` (market, day, show start, name, time, fingerprint) — `finish_marks.py`, `scripts/setup_finish_marks_table.py`
+- [x] Day list reports `hand` only while the show's rows match the fingerprint (row id, asset, length, order; air times left out)
+- [x] `POST /api/master-control/finish/mark` (set / remove); writes the marks table only
+- [x] Page: `✋ Done by hand` button on every show not already finished, yellow row, name + time, `✕ Unmark`; Finish confirm (single and batch) names the mark
+- [x] Tests: `tests/unit/test_finish_hand_marks.py`; full suite 1,685 passed
+- [ ] Lee's go: create the table on the Etere SQL Server (setup script), push
+- [ ] First live mark: look at the row colour on the real page; reply to Ashe

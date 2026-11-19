@@ -56,6 +56,19 @@
         .batch-note { font-size: 0.78rem; margin-left: 8px; }
         .batch-note.bad { color: var(--nord11); font-weight: 700; }
         .prg-block.finished .prg-header { opacity: 0.6; }
+        /* Done by hand (Ashe 11/19): a light row, so every text token on it is a dark one */
+        .prg-hand-btn { flex-shrink: 0; white-space: nowrap; color: var(--nord4); border-color: var(--nord3); }
+        .prg-hand-btn:hover { color: var(--nord13); border-color: var(--nord13); }
+        .prg-hand { font-size: 0.72rem; font-weight: 700; flex-shrink: 0; white-space: nowrap; }
+        .prg-block.hand .prg-header { background: var(--nord13); color: var(--nord0); opacity: 1; }
+        .prg-block.hand .prg-header:hover { background: var(--nord12); }
+        .prg-block.hand .prg-time, .prg-block.hand .prg-code, .prg-block.hand .prg-chevron,
+        .prg-block.hand .prg-stat { color: var(--nord1); opacity: 1; }
+        .prg-block.hand .prg-lang { background: rgba(46,52,64,0.15); color: var(--nord0); }
+        .prg-block.hand .prg-refresh, .prg-block.hand .prg-hand-btn, .prg-block.hand .prg-apply-btn {
+            color: var(--nord0); border-color: var(--nord3); background: rgba(46,52,64,0.08); }
+        .prg-block.hand .prg-refresh:hover, .prg-block.hand .prg-hand-btn:hover,
+        .prg-block.hand .prg-apply-btn:hover { background: rgba(46,52,64,0.2); }
         .prg-body { background: var(--bg-secondary); padding: 10px 12px; }
         .prg-block.collapsed .prg-body { display: none; }
         .prg-loading, .prg-note { padding: 14px 16px; font-size: 0.84rem; color: var(--text-muted); font-style: italic; }
@@ -285,11 +298,12 @@ function renderPrograms(data) {
         return;
     }
     const nFin = programs.filter(p => p.state === 'finished' && !p.triangles).length;
-    const nReady = programs.filter(p => p.state === 'ready').length;
+    const nReady = programs.filter(p => p.state === 'ready' && !p.hand).length;
+    const nHand = programs.filter(p => p.hand).length;
     const nTri = programs.reduce((n, p) => n + (p.triangles || 0), 0);
     let html = `<div class="log-meta">
         <strong>${esc(data.market)}</strong> &nbsp;·&nbsp; ${esc(data.date)}
-        &nbsp;&nbsp;<span>${programs.length} shows · ${nFin} finished · ${nReady} to finish${nTri ? ` · ${nTri} yellow triangles` : ''}</span>
+        &nbsp;&nbsp;<span>${programs.length} shows · ${nFin} finished · ${nReady} to finish${nHand ? ` · ${nHand} done by hand` : ''}${nTri ? ` · ${nTri} yellow triangles` : ''}</span>
         &nbsp;&nbsp;
         <button class="expand-btn" onclick="expandAll()">Expand all</button>
         <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
@@ -298,15 +312,30 @@ function renderPrograms(data) {
         ${batchNote ? `<span class="batch-note ${batchNote.cls}">${esc(batchNote.text)}</span>` : ''}
     </div>`;
     programs.forEach((p, pi) => {
-        const st = statFor(p);
-        // a filled show that still carries triangles gets the button back: the same
-        // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
-        // an over-full hour (program + paid alone spill) still gets a button: the same
-        // apply path strips every PI/PSA/ID so the paid spots air (Lee 9/4)
-        const fin = canFinish(p);
-        const btnLabel = btnLabelFor(p);
-        html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
-  <div class="prg-header" onclick="togglePrg(${pi})">
+        html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''} ${p.hand ? 'hand' : ''}" id="prg-${pi}">
+  ${headerHtml(p, pi)}
+  <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading…</div></div>
+</div>`;
+    });
+    document.getElementById('logArea').innerHTML = html;
+}
+
+// One show's header row. Its own function so a "done by hand" mark repaints the row in
+// place, with no re-read of the day.
+function headerHtml(p, pi) {
+    const st = statFor(p);
+    // a filled show that still carries triangles gets the button back: the same
+    // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
+    // an over-full hour (program + paid alone spill) still gets a button: the same
+    // apply path strips every PI/PSA/ID so the paid spots air (Lee 9/4)
+    // a show marked done by hand KEEPS its button (Lee 11/19): the confirm names the mark
+    const fin = canFinish(p);
+    const btnLabel = btnLabelFor(p);
+    // the mark is offered on every show Fill & Finish does not already read as finished
+    const handBtn = p.hand
+        ? `<button class="expand-btn prg-hand-btn" title="Remove the done-by-hand mark" onclick="event.stopPropagation();markHand(${pi}, false)">✕ Unmark</button>`
+        : (p.state === 'finished' && !p.triangles ? '' : `<button class="expand-btn prg-hand-btn" title="Scheduled this show by hand? Mark it so the next operator leaves it alone" onclick="event.stopPropagation();markHand(${pi}, true)">✋ Done by hand</button>`);
+    return `<div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
     ${fin && !inflight.has(p.lo) ? `<input type="checkbox" class="prg-pick" title="Tick shows, then Finish selected" ${selected.has(p.lo) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="togglePick(${p.lo}, this.checked)">` : ''}
     <span class="prg-time">${hm(p.lo_hms)}&nbsp;–&nbsp;${hm(p.hi_hms)}</span>
@@ -315,14 +344,50 @@ function renderPrograms(data) {
     ${p.state === 'needs_filler' && p.filler_options && p.filler_options.length ? fillerSelect(pi, p.filler_options, fillersFor(p)[0], `pickFiller(${pi}, this.value)`, '') : ''}
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
+    ${handBtn}
     <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${fin || inflight.has(p.lo) ? '' : 'none'}" ${inflight.has(p.lo) ? 'disabled' : ''}
             onclick="event.stopPropagation();finishProgram(${pi})">${inflight.has(p.lo) ? 'Finishing…' : btnLabel}</button>
+    ${p.hand ? `<span class="prg-hand">✋ done by hand · ${esc(p.hand.by)} · ${esc(p.hand.at)}</span>` : ''}
     <span class="prg-stat ${st.cls}" id="prg-stat-${pi}">${esc(st.text)}</span>
-  </div>
-  <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading…</div></div>
-</div>`;
-    });
-    document.getElementById('logArea').innerHTML = html;
+  </div>`;
+}
+
+// "Done by hand" (Ashe 11/19): an operator who scheduled a show by hand marks it, the row
+// turns yellow for everyone, and the next operator leaves it alone. The server keeps the
+// mark only while the show's rows are the ones that were marked. The name is asked every
+// time (the control room PCs are shared) with the last one typed in this browser offered.
+function lastOperator() { try { return localStorage.getItem('ctvFinishOperator') || ''; } catch (e) { return ''; } }
+function handWarning(p) { return p.hand ? `${p.hand.by} marked this show DONE BY HAND (${p.hand.at})` : ''; }
+
+async function markHand(pi, on) {
+    const p = programs[pi];
+    if (!p) return;
+    const what = `${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}`;
+    let by = '';
+    if (on) {
+        by = (prompt(`Mark ${what} as DONE BY HAND?\n\nThe other operators see the mark and leave this show alone. The mark clears itself if the show is changed after this. Nothing is written to the schedule.\n\nYour name:`, lastOperator()) || '').trim();
+        if (!by) return;
+        try { localStorage.setItem('ctvFinishOperator', by); } catch (e) { /* the name is asked again next time */ }
+    } else if (!confirm(`Remove the mark from ${what}?\n\n${handWarning(p)}`)) {
+        return;
+    }
+    try {
+        const resp = await fetch('/api/master-control/finish/mark', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, by, on }),
+        });
+        const r = await parseJson(resp);
+        if (!resp.ok || r.status !== 'ok') throw new Error(r.message || r.detail || resp.statusText);
+        p.hand = r.hand || null;
+    } catch (e) {
+        alert(`Could not ${on ? 'mark' : 'unmark'} ${p.title}: ${e.message}`);
+        return;
+    }
+    // repaint this row only; the list may have been re-rendered while the request ran
+    const qi = indexOfLo(p.lo), block = byId(`prg-${qi}`);
+    if (!block || programs[qi] !== p) return;
+    block.classList.toggle('hand', !!p.hand);
+    block.querySelector('.prg-header').outerHTML = headerHtml(p, qi);
 }
 
 function togglePrg(pi) {
@@ -451,7 +516,7 @@ const isDone = r => r.status === 'applied' || r.status === 'finished';
 async function finishProgram(pi) {
     const p = programs[pi];
     const verb = btnLabelFor(p);
-    if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summaryFor(p)}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+    if (!confirm(`${p.hand ? `⚠ ${handWarning(p)}. ${verb} changes what was set by hand.\n\n` : ''}${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summaryFor(p)}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
     const r = await applyOne(p);
     if (isDone(r)) {
         selected.delete(p.lo);
@@ -471,7 +536,7 @@ async function finishProgram(pi) {
 async function finishSelected() {
     const picks = programs.filter(p => selected.has(p.lo) && canFinish(p) && !inflight.has(p.lo));
     if (!picks.length) return;
-    const lines = picks.map(p => `• ${hm(p.lo_hms)}–${hm(p.hi_hms)}  ${p.title}  — ${btnLabelFor(p)}: ${summaryFor(p)}`).join('\n');
+    const lines = picks.map(p => `• ${hm(p.lo_hms)}–${hm(p.hi_hms)}  ${p.title}  — ${btnLabelFor(p)}: ${summaryFor(p)}${p.hand ? `\n    ⚠ ${handWarning(p)}` : ''}`).join('\n');
     if (!confirm(`Finish ${picks.length} show${picks.length === 1 ? '' : 's'} in ${selectedMarket}, one after another?\n\n${lines}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
     const b = byId('finishSelectedBtn');
     if (b) { b.disabled = true; b.textContent = `Finishing 1 of ${picks.length}…`; }

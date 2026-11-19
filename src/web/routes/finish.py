@@ -83,6 +83,17 @@ class FinishApplyBody(BaseModel):
     language: str = ""  # the grid's language word for the show — picks the filler pool
 
 
+class FinishMarkBody(BaseModel):
+    """An operator's "done by hand" mark on one show (Ashe 11/19). `on=False` removes it."""
+
+    market: str
+    date: str
+    lo: float
+    hi: float
+    by: str = ""  # the operator's name, asked once per browser
+    on: bool = True
+
+
 READ_RETRY_ATTEMPTS = 3
 
 
@@ -206,5 +217,20 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
             return r
 
         return await run_json(f"apply {body.market} {body.date} {body.lo}-{body.hi}", _run)
+
+    @router.post("/api/master-control/finish/mark")
+    async def finish_mark(body: FinishMarkBody):
+        mid = _market_id(body.market)
+        if body.on and not body.by.strip():
+            raise HTTPException(status_code=400, detail="a name is required")
+
+        def _run():
+            from browser_automation.etere_direct_client import connect
+            from src.business_logic.services.finish_service import mark_window
+
+            with connect() as conn:
+                return mark_window(conn, mid, body.date, body.lo, body.hi, body.by, body.on)
+
+        return await run_json(f"mark {body.market} {body.date} {body.lo}-{body.hi}", _run)
 
     return router

@@ -30,6 +30,7 @@ from src.business_logic.services.daily_programming_run import (
     _slots,
     _sync_checksums,
 )
+from src.business_logic.services.finish_marks import clear_mark, hand_for, load_marks, set_mark
 from src.business_logic.services.finish_plan import (
     FCC_ID_ASSET,
     FPS,
@@ -559,6 +560,7 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
     """The day's program windows with the derived Finish state for each."""
     rows = load_day(cur, market, date)
     tri = _triangle_oras(cur, market, date)
+    marks = load_marks(cur, market, date)
     out = []
     for p in day_windows(market, date, rows):
         r = plan_window(
@@ -591,9 +593,26 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
                 "id_airs": r.get("id_airs"),
                 "error": r.get("error"),
                 "filler_options": r.get("filler_options", []),
+                # an operator's "done by hand" mark, reported only while the show's rows
+                # are the ones that were marked (Ashe 11/19; Lee: it clears itself)
+                "hand": hand_for(marks, p["lo"], evs),
             }
         )
     return out
+
+
+def mark_window(conn, market: int, date: str, lo: float, hi: float, by: str, on: bool) -> dict:
+    """Set or remove one show's "done by hand" mark. Touches the marks table only,
+    never the playlist. Returns {"hand": {by, at} | None}."""
+    cur = conn.cursor()
+    if on:
+        evs = window_from_day(load_day(cur, market, date), lo, hi)
+        hand = set_mark(cur, market, date, lo, hi, by, evs)
+    else:
+        clear_mark(cur, market, date, lo)
+        hand = None
+    conn.commit()
+    return {"status": "ok", "hand": hand}
 
 
 def apply_window(
