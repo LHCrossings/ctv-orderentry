@@ -231,3 +231,49 @@ def test_two_grid_pages_refuse(layout):
     layouts, texts = layout
     with pytest.raises(VidaParseError, match="pages 1, 2"):
         parse_vida_grid_layouts(layouts * 2, texts * 2, source_path=PDF)
+
+
+# ── Entry: the paid interview is its own hidden line, never Production ───────
+
+
+def _flights_in(order, start="11/20/2026"):
+    return [
+        {"index": 0, "contract_code": "Vida WAHBE 2611", "start_date_override": start},
+        {"index": 1, "contract_code": "Vida WAHBE 2612", "start_date_override": "12/14/2026"},
+    ]
+
+
+def test_interview_enters_as_a_hidden_line_on_flight_1_by_default(order):
+    from browser_automation.vida_automation import default_service_lines, service_charges
+
+    assert [c.description for c in service_charges(order)] == [
+        "Interview segment (Mandarin) 4x airtime"
+    ]
+    assert default_service_lines(order, _flights_in(order)) == [
+        {
+            "description": "Interview segment (Mandarin) 4x airtime",
+            "amount": 2970.59,  # the sheet's gross; the 15% header nets it to $2,525
+            "date": "11/20/2026",  # the ANSWERED start of flight 1, not the sheet's 11/16
+            "index": 0,
+        }
+    ]
+
+
+def test_hidden_line_date_picks_the_phase_and_must_sit_in_a_flight(order):
+    from browser_automation.vida_automation import _flight_for_date
+
+    fi = _flights_in(order)
+    assert _flight_for_date(order, fi, date(2026, 12, 13)) == 0
+    assert _flight_for_date(order, fi, date(2026, 12, 14)) == 1
+    assert _flight_for_date(order, fi, date(2027, 1, 15)) == 1
+    assert _flight_for_date(order, fi, date(2026, 11, 19)) is None  # before the answered start
+    assert _flight_for_date(order, fi, date(2027, 1, 16)) is None
+
+
+def test_production_box_no_longer_takes_every_charge():
+    """The box took sum(order.charges); with a second charge that would have
+    labelled the interview 'Production' (Lee 11/19: it cannot be)."""
+    src = (_root / "browser_automation" / "vida_automation.py").read_text()
+    assert "sum(ch.amount for ch in order.charges)" not in src
+    assert 'ch.description == "Production"' in src
+    assert "hide_from_scheduler=True" in src

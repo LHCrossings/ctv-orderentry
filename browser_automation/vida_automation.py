@@ -493,11 +493,16 @@ def gather_vida_inputs(source_path: str) -> Optional[dict]:
                 f" {rate:>8}  {ln.total_spots} spots  {ln.week_spots}{union}{blocks}"
             )
     if order.charges:
-        print("\n  Charges (→ Production box on flight 1's first paid line, not airtime):")
+        print("\n  Charges (not airtime):")
         for ch in order.charges:
             lst = f"  (list ${ch.list_amount:,.2f})" if ch.list_amount else ""
             net = f"  → ${ch.billed:,.2f} net" if abs(ch.billed - ch.amount) > 0.005 else ""
-            print(f"    {ch.description:<20} ${ch.amount:>10,.2f} in the box{net}{lst}")
+            where = (
+                "Production box, flight 1's first paid line"
+                if ch.description == "Production"
+                else "its own line, hidden from the scheduler"
+            )
+            print(f"    {ch.description:<42} ${ch.amount:>10,.2f}{net}{lst}  → {where}")
     print(
         f"\n  Order: {sum(ln.total_spots for fl in order.flights for ln in fl.paid_lines)} paid"
         f" + {sum(ln.total_spots for fl in order.flights for ln in fl.bonus_lines)} bonus"
@@ -632,6 +637,30 @@ def gather_vida_inputs(source_path: str) -> Optional[dict]:
             }
         )
 
+    # ── Paid non-airtime rows: one hidden line each; the date decides the contract
+    #    (phase) and the billing month, and nothing on the sheet states it ──
+    service_lines = default_service_lines(order, flights_in)
+    for sl in service_lines:
+        print(f"\n  Hidden line (never scheduled): '{sl['description']}'  1 x ${sl['amount']:,.2f}")
+        while True:
+            raw = input(f"    Line date (decides the contract and the month) [{sl['date']}]: ")
+            raw = raw.strip()
+            try:
+                d = parse_date(raw) if raw and raw.lower() not in ("y", "yes") else None
+            except Exception:
+                print("    ✗ Not a date (m/d/yyyy)")
+                continue
+            if d is None:
+                break
+            idx = _flight_for_date(order, flights_in, d)
+            if idx is None:
+                print("    ✗ That date is in none of the flights above")
+                continue
+            sl["date"], sl["index"] = fmt_mmddyyyy(d), idx
+            break
+        code_for = next(f["contract_code"] for f in flights_in if f["index"] == sl["index"])
+        print(f"    → on {code_for}, dated {sl['date']}")
+
     _upsert_customer_db(
         cust_name, customer_id, code_name=short, description_name=desc_prefix, separation=separation
     )
@@ -643,6 +672,7 @@ def gather_vida_inputs(source_path: str) -> Optional[dict]:
         "market": market_code,
         "agency_pct": agency_pct,
         "flights": flights_in,
+        "service_lines": service_lines,
         # Batch-summary label: the first contract's code (lesson: the gathered code,
         # never the DB id). Every flight's code is returned by run_vida_order.
         "contract_code": flights_in[0]["contract_code"],
@@ -661,6 +691,7 @@ def _create_vida_contract(
     inputs: dict,
     production: float,
     dry_run: bool = False,
+    services: Optional[list] = None,
 ) -> Optional[str]:
     from browser_automation.etere_direct_client import (
         AGENCY_IDS,
@@ -763,6 +794,52 @@ def _create_vida_contract(
                 "attached — no paid line on this flight. Rolling back."
             )
 
+        # Paid non-airtime rows: one line each, 1 unit at the sheet's amount on the
+        # header's money basis, 6:00a-6:01a, hidden from the scheduler (the
+        # services-line shape: CBM 2203, ACM 3211). No block pruning: a hidden line
+        # never places.
+        for sl in services or []:
+            d = parse_date(sl["date"])
+            line_count += 1
+            print(
+                f"  [LINE {line_count}] {market_code} {sl['description']}: "
+                f"{fmt_mmddyyyy(d)} 1 x ${sl['amount']:,.2f}  ← hidden from the scheduler"
+            )
+            hid = client.add_contract_line(
+                market=market_code,
+                days="M-Su",
+                time_range="06:00-06:01",
+                description=sl["description"],
+                rate=sl["amount"],
+                total_spots=1,
+                spots_per_week=1,
+                max_daily_run=1,
+                date_from=d,
+                date_to=d,
+                duration="1",
+                booking_code=2,
+                scheduling_type=VIDA_SCHEDULING_TYPE,
+                separation_intervals=separation,
+                hide_from_scheduler=True,
+            )
+            hc = conn.cursor()
+            hc.execute(
+                "SELECT CAST(HIDEFROMSCHEDULER AS int), N_PASSAGGI, IMPORTO FROM CONTRATTIRIGHE "
+                "WHERE ID_CONTRATTIRIGHE = %s",
+                (int(hid),),
+            )
+            hrow = hc.fetchone()
+            if (
+                hrow is None
+                or int(hrow[0] or 0) != 1
+                or int(hrow[1] or 0) != 1
+                or abs(float(hrow[2] or 0) - sl["amount"]) > 0.005
+            ):
+                raise RuntimeError(
+                    f"Vida: hidden line {hid} '{sl['description']}' read back as {hrow} — "
+                    f"expected hidden, 1 x ${sl['amount']:,.2f}; rolling back"
+                )
+
         # Read back the header money basis before committing.
         cur = conn.cursor()
         cur.execute(
@@ -846,15 +923,31 @@ def run_vida_order(order: VidaOrder, inputs: dict, dry_run: bool = False) -> lis
     created (autocommit per contract, so a partial batch is reported as such).
     dry_run writes everything inside the transaction, reads it back, rolls back."""
     results: list[tuple[str, bool]] = []
-    production_total = round(sum(ch.amount for ch in order.charges), 2)
+    production_total = round(
+        sum(ch.amount for ch in order.charges if ch.description == "Production"), 2
+    )
     flights_in = inputs.get("flights") or []
+    service_lines = inputs.get("service_lines")
+    if service_lines is None:  # answers gathered before the hidden lines existed
+        service_lines = default_service_lines(order, flights_in)
+    want = round(sum(ch.amount for ch in service_charges(order)), 2)
+    got = round(sum(sl["amount"] for sl in service_lines), 2)
+    if abs(want - got) > 0.005:
+        print(
+            f"[VIDA] ✗ the sheet carries ${want:,.2f} of paid non-airtime rows but the "
+            f"answers hold ${got:,.2f} of hidden lines; nothing entered"
+        )
+        return []
     if not flights_in:
         print("[VIDA] ✗ gather returned no flights")
         return []
     for fin in flights_in:
         flight = order.flights[fin["index"]]
         production = production_total if fin["index"] == 0 else 0.0
-        code = _create_vida_contract(order, flight, fin, inputs, production, dry_run=dry_run)
+        services = [sl for sl in service_lines if sl["index"] == fin["index"]]
+        code = _create_vida_contract(
+            order, flight, fin, inputs, production, dry_run=dry_run, services=services
+        )
         results.append((fin["contract_code"], code is not None))
         if code is None:
             print(
@@ -863,6 +956,38 @@ def run_vida_order(order: VidaOrder, inputs: dict, dry_run: bool = False) -> lis
             )
             break
     return results
+
+
+def service_charges(order: VidaOrder) -> list:
+    """Paid non-airtime rows other than Production ("Interview segment (Mandarin)
+    4x airtime"). They cannot be labelled Production and have no air dates yet, so
+    each enters as its OWN line, hidden from the scheduler (Lee 2026-11-19)."""
+    return [ch for ch in order.charges if ch.description != "Production"]
+
+
+def default_service_lines(order: VidaOrder, flights_in: list[dict]) -> list[dict]:
+    """One hidden line per service charge, on flight 1, dated its (answered) start."""
+    if not flights_in:
+        return []
+    first = flights_in[0]
+    return [
+        {
+            "description": ch.description[:50],
+            "amount": round(ch.amount, 2),
+            "date": first["start_date_override"],
+            "index": first["index"],
+        }
+        for ch in service_charges(order)
+    ]
+
+
+def _flight_for_date(order: VidaOrder, flights_in: list[dict], d: date) -> Optional[int]:
+    """Index of the gathered flight whose (answered start … end) holds d."""
+    for fin in flights_in:
+        fl = order.flights[fin["index"]]
+        if parse_date(fin["start_date_override"]) <= d <= fl.end:
+            return fin["index"]
+    return None
 
 
 def rehearsal_inputs(order: VidaOrder, start: Optional[date] = None) -> dict:
@@ -901,6 +1026,7 @@ def rehearsal_inputs(order: VidaOrder, start: Optional[date] = None) -> dict:
         "market": order.market_code,
         "agency_pct": float(order.agency_pct),
         "flights": flights_in,
+        "service_lines": default_service_lines(order, flights_in),
         "contract_code": flights_in[0]["contract_code"],
         "description": flights_in[0]["description"],
         "start_date_override": flights_in[0]["start_date_override"],

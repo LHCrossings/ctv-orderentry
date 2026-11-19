@@ -4,6 +4,29 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Paid Money That Is Not Airtime and Not Production Is a HIDDEN LINE — the Shape Was in the Notes, and I Offered Four Other Options
+
+**Session:** Lee, Vida WA Health Plan Finder REV2, "Interview segment (Mandarin) 4x airtime" $2,970.59 gross (2026-11-19)
+
+**Rule:** REV2 added a paid row that is neither airtime nor production. I asked Lee to pick between
+the Production box, a second CONTRATTISPESE row, leaving it out, and four airtime spots. He picked
+the charge row and then corrected it: "the interview can't be labeled as production. And I don't
+know when the interviews will air. They'll need their own line … hide from scheduler". That is
+the services-line shape of 10/26 (CBM 2203, ACM 3211: 1 unit at the amount, 6:00a-6:01a, duration
+1, `hide_from_scheduler=True`), and the notes already say CONTRATTISPESE counts as revenue nowhere.
+The right option was in memory and was not on my list.
+
+**How to apply:**
+1. Before asking how to enter money with no air dates, grep the notes for the shape
+   (`grep -rn hide_from_scheduler memory/ scripts/`); offer the precedent FIRST, as the
+   recommendation.
+2. In a parser, a paid non-airtime row other than Production is a named charge; in the automation
+   it is its own hidden line on the header's money basis, and only `Production` goes in the
+   Production box (`vida_automation.service_charges`, pinned by
+   `test_production_box_no_longer_takes_every_charge`).
+3. The hidden line's DATE decides the contract (phase) and the billing month and is on no sheet:
+   the gather asks for it, default the answered start of flight 1.
+
 ## A Slow Path Was Blamed on the One Hop That Differed From the Fast Control — but the Slow Transfers Already Ran on the Fast Control's Hop; Name a Hop Only After a Test That Moves ONLY That Hop, and Measure Loss From the Sender Before Reading Throughput
 
 **Session:** Lee, "FTP from the Datamover to ADSRV01 is slow again" (2026-11-09/10)
