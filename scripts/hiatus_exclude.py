@@ -14,7 +14,8 @@ the line in the Etere app), then mark, then reschedule.
 Max per day (Lee 11/20: hiatus spots are made up, not dropped): the week that loses days must
 still hold its week's spots, so each affected line's daily cap is raised to
 ceil(spots per week / days left in that week). The weekly cap is not touched, so the make-ups
-stay in the week they were bought in. A cap is never lowered. 3089: Lines 12/13 M-F, 10 a
+stay in the week they were bought in. A cap is never lowered. A marked line that is Scheduled
+but short of its ordered spots is set to Ready, so the scheduler places only the missing spots. 3089: Lines 12/13 M-F, 10 a
 week, 3 days left in the week of 12/21 -> cap 2 becomes 4; Line 14 M-Su keeps 2.
 """
 import argparse
@@ -125,6 +126,31 @@ def main():
         for lid, _, need in caps:
             cur.execute("UPDATE CONTRATTIRIGHE SET PASSAGGI_GIORNALIERI = %s WHERE ID_CONTRATTIRIGHE = %s", (need, lid))
         print(f"{len(caps)} line(s) get a higher max per day")
+        # A marked line that is Scheduled (1) but short of its ordered spots is invisible to the
+        # scheduler; Ready (0) brings it back so only the missing spots are placed. Placed spots
+        # stay put (Lee 11/20: Change Data would unschedule the whole line, which is not wanted).
+        cur.execute(
+            """UPDATE cr SET ROWSTATUS = 0 FROM CONTRATTIRIGHE cr
+               WHERE cr.ID_CONTRATTITESTATA = %s AND cr.ROWSTATUS = 1
+                 AND (EXISTS (SELECT 1 FROM trf_contractdateexclude e WHERE e.id_contrattirighe = cr.ID_CONTRATTIRIGHE)
+                      OR cr.ID_CONTRATTIRIGHE IN ({ids}))
+                 AND cr.N_PASSAGGI > (SELECT COUNT(*) FROM trafficPalinse t
+                                      WHERE t.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE)""".format(
+                ids=",".join(str(lid) for lid, _ in todo) or "0"
+            ),
+            (args.contract,),
+        )
+        print(f"{cur.rowcount} short line(s) set from Scheduled to Ready")
+        # When a reschedule ran before the cap was raised, the scheduler parked the spots it could
+        # not place on the blacklist ("Inserted from Server ..."); a line shows as blacklist-only
+        # until those rows go (3089, 11/20). Only the scheduler's own rows on marked lines.
+        cur.execute(
+            """DELETE l FROM Traffic_ScheduleList l JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = l.ID_ContrattiRighe
+               WHERE cr.ID_CONTRATTITESTATA = %s AND l.BlackList > 0 AND l.Notes LIKE 'Inserted from Server%%'
+                 AND EXISTS (SELECT 1 FROM trf_contractdateexclude e WHERE e.id_contrattirighe = cr.ID_CONTRATTIRIGHE)""",
+            (args.contract,),
+        )
+        print(f"{cur.rowcount} scheduler blacklist row(s) released on marked lines")
         expected_rows = len(todo)
         print(f"{len(todo)} row(s) to add on {len({ln for ln, _ in todo})} line(s)")
 
