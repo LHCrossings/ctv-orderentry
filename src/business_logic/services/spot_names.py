@@ -10,7 +10,7 @@ WOOF30E20) or only in language (MD30C433 + MD30M433 + MD30V433) share one serial
 language letter comes from the language word in the title (CAN / MAN / VIET), read against
 the letters the client's list already uses. Creatives take serials in ISCI order (the
 McDonald's list follows it; the portal's own row order is download time) or as pasted.
-Titles are shortened on request: year, agency and format words out, CamelCase split,
+Titles are shortened on request: year to two digits, agency and format words out, CamelCase split,
 language word last in the list's own spelling.
 A new cut of a creative that is already on the prior list at another length takes that
 creative's serial. An ISCI already on the prior list is reported, never renamed.
@@ -239,11 +239,14 @@ def creative_key(title: str, words: dict[str, str] | None = None) -> str:
 
 
 def simplify_title(title: str, words: dict[str, str] | None = None, lang_word: str = "") -> str:
-    """`2026_HomeAlone_USMcDsAlone_ACM_CAN_TVC-OLV_16x9_30` -> `Home Alone McDs Alone US CAN`."""
+    """`2026_HomeAlone_USMcDsAlone_ACM_CAN_TVC-OLV_16x9_30` -> `26 Home Alone McDs Alone US CAN`."""
     words = words or {}
     out: list[str] = []
     for tok in _tokens(title):
-        if _is_length(tok) or tok.lower() in _NOISE or re.fullmatch(r"20\d\d", tok) or tok.upper() in words:
+        if _is_length(tok) or tok.lower() in _NOISE or tok.upper() in words:
+            continue
+        if re.fullmatch(r"20\d\d", tok):  # the year stays, as two digits (Lee 11/20)
+            out.append(tok[2:])
             continue
         tail = ""
         if re.match(r"US(?=[A-Z][a-z])", tok):

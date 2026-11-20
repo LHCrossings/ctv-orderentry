@@ -113,18 +113,18 @@ MCD_PRIOR = (_FIX / "mcd_prior_20261120.txt").read_text()
 MCD_ER = (_FIX / "mcd_extreme_reach_20261119.txt").read_text()  # Extreme Reach rows, copied as-is
 
 MCD_EXPECTED = [
-    "MD30C439: Home Alone McDs Alone US CAN (MCIC016326VH)",
-    "MD15C440: Home Alone Storytelling US CAN (MCIC109526VH)",
-    "MD15C441: Home Alone Shaker Fry US CAN (MCIC110526VH)",
-    "MD15C442: Home Alone Sock US CAN (MCIC111526VH)",
-    "MD30M439: Home Alone McDs Alone US MAN (MCIM022326VH)",
-    "MD15M440: Home Alone Storytelling US MAN (MCIM147526VH)",
-    "MD15M441: Home Alone Shaker Fry US MAN (MCIM148526VH)",
-    "MD15M442: Home Alone Sock US MAN (MCIM149526VH)",
-    "MD30V439: Home Alone McDs Alone US VIE (MCIV018326VH)",
-    "MD15V440: Home Alone Storytelling US VIE (MCIV145526VH)",
-    "MD15V441: Home Alone Shaker Fry US VIE (MCIV146526VH)",
-    "MD15V442: Home Alone Sock US VIE (MCIV147526VH)",
+    "MD30C439: 26 Home Alone McDs Alone US CAN (MCIC016326VH)",
+    "MD15C440: 26 Home Alone Storytelling US CAN (MCIC109526VH)",
+    "MD15C441: 26 Home Alone Shaker Fry US CAN (MCIC110526VH)",
+    "MD15C442: 26 Home Alone Sock US CAN (MCIC111526VH)",
+    "MD30M439: 26 Home Alone McDs Alone US MAN (MCIM022326VH)",
+    "MD15M440: 26 Home Alone Storytelling US MAN (MCIM147526VH)",
+    "MD15M441: 26 Home Alone Shaker Fry US MAN (MCIM148526VH)",
+    "MD15M442: 26 Home Alone Sock US MAN (MCIM149526VH)",
+    "MD30V439: 26 Home Alone McDs Alone US VIE (MCIV018326VH)",
+    "MD15V440: 26 Home Alone Storytelling US VIE (MCIV145526VH)",
+    "MD15V441: 26 Home Alone Shaker Fry US VIE (MCIV146526VH)",
+    "MD15V442: 26 Home Alone Sock US VIE (MCIV147526VH)",
 ]
 
 
