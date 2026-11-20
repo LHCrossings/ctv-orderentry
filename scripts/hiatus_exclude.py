@@ -15,7 +15,8 @@ Max per day (Lee 11/20: hiatus spots are made up, not dropped): the week that lo
 still hold its week's spots, so each affected line's daily cap is raised to
 ceil(spots per week / days left in that week). The weekly cap is not touched, so the make-ups
 stay in the week they were bought in. A cap is never lowered. A marked line that is Scheduled
-but short of its ordered spots is set to Ready, so the scheduler places only the missing spots. 3089: Lines 12/13 M-F, 10 a
+but short of its ordered spots is set to Ready, so the scheduler places only the missing spots.
+The contract's notes get a `Hiatus 12/24 and 12/25` reminder line, once. 3089: Lines 12/13 M-F, 10 a
 week, 3 days left in the week of 12/21 -> cap 2 becomes 4; Line 14 M-Su keeps 2.
 """
 import argparse
@@ -27,6 +28,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 DAY_COLS = ("LUNEDI", "MARTEDI", "MERCOLEDI", "GIOVEDI", "VENERDI", "SABATO", "DOMENICA")
+
+
+def hiatus_note(dates) -> str:
+    """`Hiatus 12/24 and 12/25` / `Hiatus 12/24` / `Hiatus 12/24, 12/25 and 1/1`."""
+    parts = [f"{d.month}/{d.day}" for d in sorted(dates)]
+    return "Hiatus " + (parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1])
 
 
 def needed_daily_cap(start, end, day_flags, excluded, total_spots, weekly_spots):
@@ -151,6 +158,25 @@ def main():
             (args.contract,),
         )
         print(f"{cur.rowcount} scheduler blacklist row(s) released on marked lines")
+        # Reminder in the contract's notes (Lee 11/20), added once, under whatever is there.
+        note = hiatus_note(dates)
+        cur.execute("SELECT CAST(NOTE AS NVARCHAR(MAX)) FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (args.contract,))
+        old_note = (cur.fetchone()[0] or "").rstrip()
+        marked_any = bool(todo) or any(True for _ in caps)
+        cur.execute(
+            """SELECT COUNT(*) FROM trf_contractdateexclude e JOIN CONTRATTIRIGHE cr
+               ON cr.ID_CONTRATTIRIGHE = e.id_contrattirighe WHERE cr.ID_CONTRATTITESTATA = %s""",
+            (args.contract,),
+        )
+        has_marks = marked_any or cur.fetchone()[0] > 0
+        if has_marks and note.lower() not in old_note.lower():
+            new_note = f"{old_note}\n{note}" if old_note else note
+            cur.execute(
+                "UPDATE CONTRATTITESTATA SET NOTE = %s WHERE ID_CONTRATTITESTATA = %s", (new_note, args.contract)
+            )
+            print(f"contract note: add {note!r} (was {old_note!r})")
+        else:
+            print("contract note: unchanged")
         expected_rows = len(todo)
         print(f"{len(todo)} row(s) to add on {len({ln for ln, _ in todo})} line(s)")
 
@@ -182,6 +208,8 @@ def main():
                GROUP BY PASSAGGI_GIORNALIERI ORDER BY 1""",
             (args.contract,),
         )
+        cur.execute("SELECT CAST(NOTE AS NVARCHAR(MAX)) FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (args.contract,))
+        print(f"readback: contract note: {cur.fetchone()[0]!r}")
         print(f"readback: max per day on the marked lines (cap, lines): {cur.fetchall()}")
     conn.close()
 

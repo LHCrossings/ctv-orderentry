@@ -34,3 +34,9 @@ def test_no_weekly_cap_spreads_the_total_over_the_weeks():
 def test_week_with_no_day_left_is_reported():
     thu_fri = (0, 0, 0, 1, 1, 0, 0)
     assert hx.needed_daily_cap(START, END, thu_fri, HIATUS, 8, 2) == (0, [dt.date(2026, 12, 21)])
+
+
+def test_note_wording():
+    assert hx.hiatus_note(HIATUS) == "Hiatus 12/24 and 12/25"
+    assert hx.hiatus_note([dt.date(2026, 12, 24)]) == "Hiatus 12/24"
+    assert hx.hiatus_note([dt.date(2027, 1, 1), *HIATUS]) == "Hiatus 12/24, 12/25 and 1/1"
