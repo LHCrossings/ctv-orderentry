@@ -3275,6 +3275,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 delivered, prior,
                 client=str(payload.get("client") or ""), lang=str(payload.get("lang") or ""),
                 next_serial=int(raw_serial) if raw_serial else None,
+                order="pasted" if payload.get("order") == "pasted" else "isci",
+                simplify=bool(payload.get("simplify")),
             )
         except _sn.SpotNameError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
@@ -3282,8 +3284,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         notes = [f"{r.code} ({r.isci}): {r.note}" for r in rows if r.note]
         notes += [f"Current list line not read: {b}" for b in bad_prior]
         notes += [f"New spot text not read: {b}" for b in bad_delivery]
+        lines: list[str] = []
+        for i, r in enumerate(new):
+            if i and r.lang != new[i - 1].lang:
+                lines.append("")  # one group per language, as Lee keeps the lists
+            lines.append(r.line)
         return {
-            "lines": [r.line for r in new],
+            "lines": lines,
             "notes": notes,
             "summary": f"{len(new)} new name(s), {len(prior)} line(s) read from the current list",
         }

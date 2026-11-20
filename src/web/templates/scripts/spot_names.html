@@ -77,7 +77,7 @@
 <main>
     <div class="tool-card">
         <h2>Propose Names for a New Delivery</h2>
-        <p>Paste the client's current list and the new spots. The tool continues the serial and gives the :15 and :30 of one creative the same serial. Nothing is written to Etere; edit the result, then paste it into <a href="/scripts/rename-assets">Rename Assets</a>.</p>
+        <p>Paste the client's current list and the new spots. The tool continues the serial; the cuts of one creative (other length, other language) get the same serial, and the language letter comes from the language word in the title. Nothing is written to Etere; edit the result, then paste it into <a href="/scripts/rename-assets">Rename Assets</a>.</p>
 
         <label class="paste-label" for="prior">Client's current list (all of it, or the last lines)</label>
         <textarea class="paste-area" id="prior" placeholder="WOOF15E18: Woof_Zoomies2_15s_Baby_16x9_EndCardA_R4 (WFWZBEV115H)
@@ -96,11 +96,25 @@ WFHAWVV115H HC_HolidayAug26_WrappingVCouch_16x9_015_V2 :15"></textarea>
             </div>
             <div class="field-group">
                 <label class="field-label" for="lang">Language</label>
-                <input class="field-input" id="lang" placeholder="from list" maxlength="2" autocomplete="off" />
+                <input class="field-input" id="lang" placeholder="from titles" maxlength="2" autocomplete="off" />
             </div>
             <div class="field-group">
                 <label class="field-label" for="nextSerial">Next serial</label>
                 <input class="field-input" id="nextSerial" placeholder="from list" inputmode="numeric" autocomplete="off" />
+            </div>
+            <div class="field-group">
+                <label class="field-label" for="order">Serial order</label>
+                <select class="field-input" id="order" style="width:150px;text-transform:none">
+                    <option value="isci">By ISCI</option>
+                    <option value="pasted">As pasted</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label class="field-label" for="simplify">Titles</label>
+                <select class="field-input" id="simplify" style="width:150px;text-transform:none">
+                    <option value="1">Shortened</option>
+                    <option value="">As delivered</option>
+                </select>
             </div>
             <button class="btn btn-primary" id="goBtn">Propose Names</button>
             <span class="status" id="status"></span>
@@ -131,6 +145,7 @@ $('goBtn').addEventListener('click', async () => {
             body: JSON.stringify({
                 prior: $('prior').value, delivery: $('delivery').value,
                 client: $('client').value, lang: $('lang').value, next_serial: $('nextSerial').value,
+                order: $('order').value, simplify: !!$('simplify').value,
             }),
         });
         const data = await r.json().catch(() => ({detail: 'The server did not answer with JSON (' + r.status + ').'}));
