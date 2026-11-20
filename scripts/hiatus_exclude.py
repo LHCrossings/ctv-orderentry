@@ -105,7 +105,7 @@ def main():
                 if not have:
                     todo.append((lid, d))
             cur.execute("SELECT dateexclude FROM trf_contractdateexclude WHERE id_contrattirighe = %s", (lid,))
-            excl = {r[0].date() for r in cur.fetchall()} | {d for l, d in todo if l == lid}
+            excl = {r[0].date() for r in cur.fetchall()} | {d for ln, d in todo if ln == lid}
             need, dead = needed_daily_cap(d0.date(), d1.date(), days, excl, n_tot, cap_week)
             for monday in dead:
                 print(f"  NOTE line {lid} {desc}: week of {monday} has no day left; its spots cannot be made up in that week")
@@ -126,7 +126,7 @@ def main():
             cur.execute("UPDATE CONTRATTIRIGHE SET PASSAGGI_GIORNALIERI = %s WHERE ID_CONTRATTIRIGHE = %s", (need, lid))
         print(f"{len(caps)} line(s) get a higher max per day")
         expected_rows = len(todo)
-        print(f"{len(todo)} row(s) to add on {len({l for l, _ in todo})} line(s)")
+        print(f"{len(todo)} row(s) to add on {len({ln for ln, _ in todo})} line(s)")
 
     if not args.apply:
         conn.rollback()
