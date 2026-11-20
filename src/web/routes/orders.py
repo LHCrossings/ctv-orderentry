@@ -3254,6 +3254,40 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         return PlainTextResponse(log_path.read_text(encoding="utf-8", errors="replace"))
 
+    @router.get("/scripts/spot-names", response_class=HTMLResponse)
+    async def spot_names_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/spot_names.html")
+
+    @router.post("/api/scripts/spot-names/propose")
+    async def propose_spot_names(payload: dict = Body(...)):
+        """Names for a new delivery from two pasted texts. Reads and writes nothing in Etere."""
+        from business_logic.services import spot_names as _sn
+
+        prior, bad_prior = _sn.parse_prior(str(payload.get("prior") or ""))
+        delivered, bad_delivery = _sn.parse_delivery(str(payload.get("delivery") or ""))
+        if not delivered:
+            raise HTTPException(status_code=400, detail="No spot found in the new spots box (ISCI, title, length).")
+        raw_serial = str(payload.get("next_serial") or "").strip()
+        if raw_serial and not raw_serial.isdigit():
+            raise HTTPException(status_code=400, detail="Next serial must be a number.")
+        try:
+            rows = _sn.propose(
+                delivered, prior,
+                client=str(payload.get("client") or ""), lang=str(payload.get("lang") or ""),
+                next_serial=int(raw_serial) if raw_serial else None,
+            )
+        except _sn.SpotNameError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        new = [r for r in rows if r.is_new]
+        notes = [f"{r.code} ({r.isci}): {r.note}" for r in rows if r.note]
+        notes += [f"Current list line not read: {b}" for b in bad_prior]
+        notes += [f"New spot text not read: {b}" for b in bad_delivery]
+        return {
+            "lines": [r.line for r in new],
+            "notes": notes,
+            "summary": f"{len(new)} new name(s), {len(prior)} line(s) read from the current list",
+        }
+
     @router.get("/scripts/clean-asterisks", response_class=HTMLResponse)
     async def clean_asterisks_page(request: Request):
         return templates.TemplateResponse(request, "scripts/clean_asterisks.html")

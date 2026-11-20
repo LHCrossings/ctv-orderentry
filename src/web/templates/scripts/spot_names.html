@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Name New Spots — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 960px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .tool-card h2 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+        .tool-card > p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
+
+        .paste-label, .field-label {
+            font-size: 0.75rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; display: block;
+        }
+        .paste-area {
+            width: 100%; box-sizing: border-box;
+            background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+            padding: 12px 14px; font-size: 0.85rem; font-family: 'Consolas', 'Courier New', monospace;
+            color: var(--text-primary); outline: none; resize: vertical; min-height: 150px; line-height: 1.6;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .paste-area:focus, .field-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+        .paste-hint { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; margin-bottom: 20px; line-height: 1.5; }
+
+        .input-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; }
+        .field-input {
+            background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+            padding: 10px 12px; font-size: 0.95rem; font-family: 'Inter', sans-serif; font-weight: 600;
+            color: var(--text-primary); outline: none; width: 130px; text-transform: uppercase;
+        }
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
+            font-family: 'Inter', sans-serif; cursor: pointer; height: 42px; white-space: nowrap;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn-secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .result { display: none; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-color); }
+        .result.visible { display: block; }
+        .notes { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin: 10px 0 16px; padding-left: 18px; }
+        .status { font-size: 0.85rem; font-weight: 600; color: var(--nord14); margin-left: 12px; }
+        .status.err { color: var(--nord11); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🔤</div>
+            <div>
+                <h1>Name New <span>Spots</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Propose Names for a New Delivery</h2>
+        <p>Paste the client's current list and the new spots. The tool continues the serial and gives the :15 and :30 of one creative the same serial. Nothing is written to Etere; edit the result, then paste it into <a href="/scripts/rename-assets">Rename Assets</a>.</p>
+
+        <label class="paste-label" for="prior">Client's current list (all of it, or the last lines)</label>
+        <textarea class="paste-area" id="prior" placeholder="WOOF15E18: Woof_Zoomies2_15s_Baby_16x9_EndCardA_R4 (WFWZBEV115H)
+WOOF15E19: Woof_Zoomies2_15s_Baby_16x9_EndCardC_R4 (WFWZBFV115H)"></textarea>
+        <div class="paste-hint">From the client's folder on V:\Commercials. The client code, language letter and next serial come from these lines.</div>
+
+        <label class="paste-label" for="delivery">New spots</label>
+        <textarea class="paste-area" id="delivery" placeholder="Copy the rows from the delivery page, or type one spot per line:
+WFHAWVV115H HC_HolidayAug26_WrappingVCouch_16x9_015_V2 :15"></textarea>
+        <div class="paste-hint">Each spot needs its ISCI, title and length. Also accepted: <code>Title (ISCI)</code>.</div>
+
+        <div class="input-row">
+            <div class="field-group">
+                <label class="field-label" for="client">Client code</label>
+                <input class="field-input" id="client" placeholder="from list" autocomplete="off" />
+            </div>
+            <div class="field-group">
+                <label class="field-label" for="lang">Language</label>
+                <input class="field-input" id="lang" placeholder="from list" maxlength="2" autocomplete="off" />
+            </div>
+            <div class="field-group">
+                <label class="field-label" for="nextSerial">Next serial</label>
+                <input class="field-input" id="nextSerial" placeholder="from list" inputmode="numeric" autocomplete="off" />
+            </div>
+            <button class="btn btn-primary" id="goBtn">Propose Names</button>
+            <span class="status" id="status"></span>
+        </div>
+
+        <div class="result" id="result">
+            <label class="paste-label" for="out">Proposed names (edit as needed)</label>
+            <textarea class="paste-area" id="out" spellcheck="false"></textarea>
+            <ul class="notes" id="notes"></ul>
+            <button class="btn btn-secondary" id="copyBtn">Copy</button>
+            <span class="status" id="copyStatus"></span>
+        </div>
+    </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+$('goBtn').addEventListener('click', async () => {
+    const status = $('status');
+    status.className = 'status';
+    status.textContent = '';
+    $('goBtn').disabled = true;
+    try {
+        const r = await fetch('/api/scripts/spot-names/propose', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                prior: $('prior').value, delivery: $('delivery').value,
+                client: $('client').value, lang: $('lang').value, next_serial: $('nextSerial').value,
+            }),
+        });
+        const data = await r.json().catch(() => ({detail: 'The server did not answer with JSON (' + r.status + ').'}));
+        if (!r.ok) throw new Error(data.detail || 'Request failed.');
+        $('out').value = data.lines.join('\n');
+        $('out').rows = Math.max(6, data.lines.length + 1);
+        const notes = $('notes');
+        notes.textContent = '';
+        data.notes.forEach(n => { const li = document.createElement('li'); li.textContent = n; notes.appendChild(li); });
+        $('result').classList.add('visible');
+        status.textContent = data.summary;
+    } catch (e) {
+        status.className = 'status err';
+        status.textContent = e.message;
+    } finally {
+        $('goBtn').disabled = false;
+    }
+});
+
+$('copyBtn').addEventListener('click', async () => {
+    const out = $('out');
+    try { await navigator.clipboard.writeText(out.value); }
+    catch (e) { out.select(); document.execCommand('copy'); }
+    $('copyStatus').textContent = 'Copied';
+    setTimeout(() => { $('copyStatus').textContent = ''; }, 2000);
+});
+</script>
+
+</body>
+</html>

@@ -1267,3 +1267,12 @@ Lee's rules: the Finish button stays on a marked show; the mark names who set it
 - [x] Tests: `tests/unit/test_finish_hand_marks.py`; full suite 1,685 passed
 - [ ] Lee's go: create the table on the Etere SQL Server (setup script), push
 - [ ] First live mark: look at the row colour on the real page; reply to Ashe
+
+## Name New Spots card (Lee, 2026-11-20)
+
+Rule (Lee): the :15 and :30 of one creative share a serial; the next serial comes from the client's own list (V:\Commercials), pasted, not from Etere (FILMATI holds 5 of Woof's 21 names).
+
+- [x] `business_logic/services/spot_names.py`: read the prior list, read the delivery (portal cells / `ISCI title :15` / `Title (ISCI)`), pair by title without length and version, propose
+- [x] `/scripts/spot-names` page + `POST /api/scripts/spot-names/propose`; tile on Control Room; reads and writes nothing in Etere; output pastes into Rename Assets
+- [x] Tests: `tests/unit/test_spot_names.py` (Woof list of 11/20 as fixture, the six Holiday spots as the oracle, route)
+- [ ] Lee: paste a real copy of the delivery page rows; the cell layout in the test is my reading of the screenshot
