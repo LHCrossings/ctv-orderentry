@@ -243,6 +243,56 @@ def _lookup_contract_by_tracking(tracking_number: str) -> tuple:
 # UPFRONT INPUT COLLECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _pdf_text(pdf_path: str) -> str:
+    """All pages of the order as text; '' when it cannot be read (the prompt still works)."""
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            return "\n".join((pg.extract_text() or "") for pg in pdf.pages)
+    except Exception:
+        return ""
+
+
+def _ask_hiatus_dates(pdf_path: str, lines: list) -> list:
+    """Ask for the days this order must not air on (Lee 11/20). Enter = the default.
+
+    The order's own hiatus wording is shown above the prompt, and the dates it names are offered
+    as the default; without any, the default is none. The days are marked on the lines at entry,
+    before anything is scheduled (`hiatus.apply`).
+    """
+    from browser_automation.hiatus import hiatus_mentions, mentioned_dates, parse_hiatus_dates
+
+    start = min(_parse_date(ln['start_date']) for ln in lines)
+    end = max(_parse_date(ln['end_date']) for ln in lines)
+    mentions = hiatus_mentions(_pdf_text(pdf_path))
+    default = []
+    if mentions:
+        print("\n[HIATUS] The order says:")
+        for m in mentions:
+            print(f"    {m}")
+        default = mentioned_dates(mentions, start, end)
+    shown = ", ".join(f"{d.month}/{d.day}" for d in default) or "none"
+    while True:
+        raw = input(f"\n  Hiatus dates for this order, e.g. 12/24-12/25 [{shown}]: ").strip()
+        if not raw or raw.lower() in ('y', 'yes'):
+            dates = default
+        else:
+            try:
+                dates = parse_hiatus_dates(raw, start, end)
+            except ValueError as exc:
+                print(f"  {exc}")
+                continue
+        outside = [d for d in dates if not (start <= d <= end)]
+        if outside:
+            print(f"  {', '.join(str(d) for d in outside)} is outside the flight {start} to {end}.")
+            continue
+        if dates:
+            print(f"[HIATUS] ✓ No spots on {', '.join(f'{d.month}/{d.day}/{d:%y}' for d in dates)}")
+        else:
+            print("[HIATUS] ✓ None")
+        return dates
+
+
 def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     """
     Gather ALL user inputs BEFORE browser automation starts.
@@ -339,6 +389,8 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     billing = BillingType.CUSTOMER_SHARE_AGENCY
     print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
+    hiatus_dates = _ask_hiatus_dates(pdf_path, lines)
+
     print("\n" + "="*70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
     print("="*70)
@@ -353,6 +405,7 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         'contract_id': contract_id,              # ID_CONTRATTITESTATA integer — direct DB uses this
         'notes': _build_notes(order_data),
         'first_available_date': first_available_date,  # date or None; set for revision_change only
+        'hiatus_dates': hiatus_dates,            # list of dates the order must not air on ([] = none)
     }
 
 
@@ -901,6 +954,27 @@ def _warn_ghost_spots(conn, ph: str) -> None:
               f"for the list.")
 
 
+def _apply_hiatus_at_entry(conn, contract_id: int, dates: list) -> None:
+    """Mark the hiatus days on the contract's lines inside the entry transaction, so the first
+    schedule already honours them. A revision's older lines that have spots on those days are
+    left alone and named: the Hiatus card (/orders/hiatus) pulls those spots safely."""
+    if not dates:
+        return
+    from browser_automation.hiatus import apply as hiatus_apply
+
+    r = hiatus_apply(conn, contract_id, dates, on_placed="skip")
+    print(f"\n[HIATUS] ✓ {r['hiatus_note']}: {r['marked_rows']} day mark(s) on {r['lines']} line(s), "
+          f"max per day raised on {len(r['caps'])} line(s)"
+          + (", note added to the contract" if r['note_added'] else ""))
+    for lid, desc, monday in r['dead_weeks']:
+        print(f"  ⚠ line {lid} {desc}: the week of {monday} has no day left; its spots cannot air that week")
+    if r['skipped']:
+        print(f"  ⚠ {len(r['skipped'])} line(s) already have spots on the hiatus days and were NOT marked.")
+        print("    Open the Hiatus card (/orders/hiatus) for this contract to pull those spots.")
+        for lid, desc, n in r['skipped']:
+            print(f"      line {lid} {desc}: {n} spot(s)")
+
+
 def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
     """
     Enter a WorldLink order directly via DB stored procedures (no browser).
@@ -1147,6 +1221,8 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                 _add_asian_lines_direct(client, lines, separation, row_status=line_row_status)
             else:
                 _add_crossings_lines_direct(client, lines, separation, row_status=line_row_status)
+
+        _apply_hiatus_at_entry(conn, contract_id, user_input.get('hiatus_dates') or [])
 
         conn.commit()
         _warn_ghost_spots(conn, ph)

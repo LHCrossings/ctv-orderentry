@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hiatus — CTV Control Room</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/static/css/_variables.css" />
+  <link rel="stylesheet" href="/static/css/portal.css" />
+  <style>
+    main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    .search-wrap { position: relative; margin-bottom: 28px; }
+    .search-wrap input {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: var(--bg-primary);
+      color: var(--text-primary); font-size: 0.95rem; box-sizing: border-box;
+      font-family: inherit;
+    }
+    .search-wrap input:focus { outline: none; border-color: var(--nord10); }
+    .search-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--bg-primary); border: 1px solid var(--border-color);
+      border-radius: 8px; z-index: 100; max-height: 260px; overflow-y: auto;
+      display: none; box-shadow: 0 4px 12px var(--shadow-color);
+    }
+    .search-dropdown.open { display: block; }
+    .search-option {
+      padding: 9px 14px; cursor: pointer; font-size: 0.88rem;
+      border-bottom: 1px solid var(--border-color); color: var(--text-primary);
+    }
+    .search-option:last-child { border-bottom: none; }
+    .search-option:hover { background: var(--bg-secondary); }
+    .search-option .code { font-weight: 600; color: var(--nord10); margin-right: 8px; }
+    .search-option .dates { color: var(--text-secondary); font-size: 0.8rem; }
+
+    .contract-banner {
+      background: var(--bg-primary); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 24px;
+      display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+    }
+    .contract-banner .c-code { font-weight: 700; color: var(--nord10); font-size: 1rem; }
+    .contract-banner .c-desc { color: var(--text-primary); font-size: 0.9rem; }
+    .contract-banner .c-dates { color: var(--text-secondary); font-size: 0.82rem; margin-left: auto; }
+
+    .section-label {
+      font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th {
+      background: var(--bg-secondary); color: var(--text-secondary); font-weight: 600;
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border-color);
+    }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-secondary); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .market-badge {
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      background: var(--nord9); font-size: 0.78rem; font-weight: 600; color: #fff;
+    }
+    .new-val { color: var(--accent-success); font-weight: 600; }
+    .missed-val { color: var(--accent-danger); }
+
+    .action-row { margin-top: 24px; display: flex; align-items: center; gap: 16px; }
+    .btn-apply {
+      background: var(--accent-primary); color: #fff; border: none;
+      padding: 10px 28px; border-radius: 8px; font-size: 0.9rem;
+      font-weight: 600; cursor: pointer;
+    }
+    .btn-apply:hover { opacity: 0.9; }
+    .btn-apply:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result-msg { font-size: 0.88rem; }
+    .empty-msg { color: var(--text-secondary); font-size: 0.88rem; padding: 20px 0; }
+    #preview-section { display: none; }
+  
+    main { max-width: 1000px; }
+    .step { margin-bottom: 30px; }
+    .step-title { font-weight: 700; color: var(--text-primary); font-size: 0.98rem; margin-bottom: 8px; }
+    .step-help { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.55; margin-bottom: 10px; }
+    .picked { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .picked .contract-banner { margin-bottom: 0; padding: 8px 14px; }
+    .x-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 1rem; }
+    .dates-input {
+      width: 320px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--bg-primary); color: var(--text-primary); font-size: 0.95rem; font-family: inherit;
+    }
+    .btn-plain {
+      background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);
+      padding: 10px 22px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-plain:disabled { opacity: 0.5; cursor: not-allowed; }
+    .c-block { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+    .c-block .contract-banner { border: none; border-bottom: 1px solid var(--border-color); border-radius: 0; margin: 0; }
+    .c-summary { padding: 10px 16px; font-size: 0.88rem; line-height: 1.6; color: var(--text-primary); }
+    .c-summary .warn { color: var(--accent-danger); font-weight: 600; }
+    .c-summary .good { color: var(--accent-success); font-weight: 600; }
+    details.lines { padding: 0 16px 12px; }
+    details.lines summary { cursor: pointer; color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 8px; }
+    .hidden-step { display: none; }
+  </style>
+</head>
+<body>
+
+<header class="portal-header">
+  <div class="header-inner">
+    <div class="logo">
+      <a href="/" class="home-btn">🏠</a>
+      <div class="logo-icon">⏸️</div>
+      <div class="logo-text">
+        <div class="logo-name">Hiatus</div>
+        <div class="logo-sub">Orders</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="step">
+    <div class="step-title">1. Pick the contract or contracts</div>
+    <div class="step-help">Search by code or description. Add as many as the hiatus covers.</div>
+    <div class="search-wrap" style="margin-bottom:0">
+      <input type="text" id="contractSearch" placeholder="Search by contract code or description…" autocomplete="off" />
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </div>
+    <div class="picked" id="picked"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-title">2. Hiatus dates</div>
+    <div class="step-help">The days that must not air, for example <b>12/24-12/25</b> or <b>12/24, 12/26</b>. A year is not needed; it comes from each contract's flight.</div>
+    <input type="text" class="dates-input" id="datesInput" placeholder="12/24-12/25" autocomplete="off" />
+    <button class="btn-plain" id="previewBtn" disabled style="margin-left:10px">Preview</button>
+    <span class="result-msg" id="previewMsg" style="margin-left:10px"></span>
+  </div>
+
+  <div class="step hidden-step" id="stepPreview">
+    <div class="step-title">3. Review, then apply</div>
+    <div class="step-help">Apply pulls only the spots that sit on the hiatus days (playlist and contract side, with a backup),
+      blocks those days on each line, raises max per day where the short week needs it (max per week does not change),
+      sets those lines to Ready, and adds the reminder to the contract notes.</div>
+    <div id="previewWrap"></div>
+    <div class="action-row">
+      <button class="btn-apply" id="applyBtn" disabled>Apply hiatus</button>
+      <span class="result-msg" id="applyMsg"></span>
+    </div>
+  </div>
+
+  <div class="step hidden-step" id="stepAfter">
+    <div class="step-title">4. Reschedule in Etere, then check</div>
+    <div class="step-help">In the Etere scheduler, schedule these contracts. Only the pulled spots are placed again; the rest do not move.
+      When the scheduler has finished, press Check.</div>
+    <div id="applyWrap"></div>
+    <div class="action-row">
+      <button class="btn-apply" id="checkBtn">Check</button>
+      <span class="result-msg" id="checkMsg"></span>
+    </div>
+    <div id="checkWrap" style="margin-top:16px"></div>
+  </div>
+</main>
+
+<script>
+let _picked = [];
+let _searchTimer = null;
+let _previewKey = '';
+
+const $ = id => document.getElementById(id);
+const searchInput = $('contractSearch'), dropdown = $('searchDropdown');
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function mdy(iso) { const p = iso.split('-'); return `${+p[1]}/${+p[2]}`; }
+function plural(n, w) { return `${n} ${w}${n === 1 ? '' : 's'}`; }
+function banner(code, desc, right) {
+    return `<div class="contract-banner"><span class="c-code">${escHtml(code)}</span><span class="c-desc">${escHtml(desc || '')}</span><span class="c-dates">${right || ''}</span></div>`;
+}
+function msg(el, text, kind) {
+    el.textContent = text;
+    el.style.color = kind === 'bad' ? 'var(--accent-danger)' : kind === 'good' ? 'var(--accent-success)' : '';
+}
+async function post(url, body) {
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error(text.slice(0, 200)); }
+    if (!resp.ok) throw new Error(data.detail || 'Error');
+    return data;
+}
+
+searchInput.addEventListener('input', () => {
+    clearTimeout(_searchTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) { dropdown.classList.remove('open'); return; }
+    _searchTimer = setTimeout(() => doSearch(q), 280);
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) dropdown.classList.remove('open');
+});
+
+async function doSearch(q) {
+    const resp = await fetch(`/api/orders/fix-overscheduled/search?q=${encodeURIComponent(q)}`);
+    if (!resp.ok) return;
+    const results = await resp.json();
+    dropdown.innerHTML = '';
+    if (!results.length) {
+        dropdown.innerHTML = '<div class="search-option">No contracts found</div>';
+    } else {
+        results.forEach(r => {
+            const el = document.createElement('div');
+            el.className = 'search-option';
+            el.innerHTML = `<span class="code">${escHtml(r.code)}</span>${escHtml(r.description || '')} <span class="dates">${r.date_start || ''} – ${r.date_end || ''}</span>`;
+            el.addEventListener('click', () => addContract(r));
+            dropdown.appendChild(el);
+        });
+    }
+    dropdown.classList.add('open');
+}
+
+function addContract(r) {
+    if (!_picked.some(c => c.id === r.id)) _picked.push(r);
+    searchInput.value = '';
+    dropdown.classList.remove('open');
+    renderPicked();
+}
+
+function renderPicked() {
+    const wrap = $('picked');
+    wrap.innerHTML = '';
+    _picked.forEach((c, i) => {
+        const row = document.createElement('div');
+        row.innerHTML = banner(c.code, c.description, `${c.date_start || ''} – ${c.date_end || ''} <button class="x-btn" title="Remove">✕</button>`);
+        row.querySelector('.x-btn').addEventListener('click', () => { _picked.splice(i, 1); renderPicked(); });
+        wrap.appendChild(row);
+    });
+    stale();
+}
+
+function stale() {
+    $('previewBtn').disabled = !_picked.length || !$('datesInput').value.trim();
+    $('stepPreview').style.display = 'none';
+    $('stepAfter').style.display = 'none';
+    $('applyBtn').disabled = true;
+}
+$('datesInput').addEventListener('input', stale);
+$('datesInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('previewBtn').disabled) $('previewBtn').click(); });
+
+function request() { return { contract_ids: _picked.map(c => c.id), dates: $('datesInput').value.trim() }; }
+
+$('previewBtn').addEventListener('click', async () => {
+    const body = request();
+    msg($('previewMsg'), 'Reading the contracts…');
+    $('previewBtn').disabled = true;
+    try {
+        const data = await post('/api/orders/hiatus/preview', body);
+        renderPreview(data);
+        _previewKey = JSON.stringify(body);
+        msg($('previewMsg'), '');
+    } catch (e) {
+        msg($('previewMsg'), `Error: ${e.message}`, 'bad');
+    } finally {
+        $('previewBtn').disabled = false;
+    }
+});
+
+function renderPreview(data) {
+    let html = '', canApply = false, blocked = false;
+    for (const c of data) {
+        const name = _picked.find(p => p.id === c.contract_id) || {};
+        if (c.error) {
+            blocked = true;
+            html += `<div class="c-block">${banner(name.code || c.contract_id, name.description)}<div class="c-summary"><span class="warn">Cannot preview: ${escHtml(c.error)}</span></div></div>`;
+            continue;
+        }
+        const days = c.dates.map(mdy).join(', ');
+        const toMark = c.lines.reduce((s, l) => s + l.to_mark, 0);
+        const caps = c.lines.filter(l => l.cap_new > l.cap_old).length;
+        const dead = c.lines.filter(l => l.dead_weeks.length);
+        let sum;
+        if (!c.lines.length) {
+            sum = `No line of this contract airs on ${days}. Nothing to do.`;
+        } else {
+            sum = `<b>${plural(c.lines.length, 'line')}</b> can air on ${days}.<br>`;
+            sum += c.placed ? `<b>${plural(c.placed, 'spot')}</b> on those days will be pulled and made up.<br>` : 'No spots are placed on those days.<br>';
+            sum += toMark ? `${plural(toMark, 'day mark')} to add.` : 'The days are already blocked.';
+            sum += caps ? ` Max per day goes up on ${plural(caps, 'line')}.` : ' Max per day does not change.';
+            sum += c.note_present ? '' : `<br>Contract note to add: “${escHtml(c.hiatus_note)}”.`;
+            if (dead.length) sum += `<br><span class="warn">${plural(dead.length, 'line')} lose every day of a week; those spots cannot be made up in that week.</span>`;
+            if (c.aired) { blocked = true; sum += `<br><span class="warn">${plural(c.aired, 'spot')} on those days already aired. This contract cannot be applied.</span>`; }
+            else if (toMark || c.placed || caps || !c.note_present) canApply = true;
+        }
+        html += `<div class="c-block">${banner(c.code, c.description, days)}<div class="c-summary">${sum}</div>`;
+        if (c.lines.length) {
+            html += `<details class="lines"><summary>Lines</summary><table><thead><tr><th>Market</th><th>Line</th><th class="num">Spots on days</th><th class="num">Max / day</th><th class="num">Max / week</th></tr></thead><tbody>`;
+            for (const l of c.lines) {
+                const cap = l.cap_new > l.cap_old ? `${l.cap_old} → <span class="new-val">${l.cap_new}</span>` : `${l.cap_old}`;
+                html += `<tr><td><span class="market-badge">${escHtml(l.market)}</span></td><td>${escHtml(l.description)}</td><td class="num">${l.placed}</td><td class="num">${cap}</td><td class="num">${l.weekly || '—'}</td></tr>`;
+            }
+            html += '</tbody></table></details>';
+        }
+        html += '</div>';
+    }
+    $('previewWrap').innerHTML = html;
+    $('stepPreview').style.display = 'block';
+    $('stepAfter').style.display = 'none';
+    $('applyBtn').disabled = !canApply || blocked;
+    msg($('applyMsg'), blocked ? 'Remove the contract that cannot be applied, then preview again.' : (canApply ? '' : 'Nothing to apply.'));
+}
+
+$('applyBtn').addEventListener('click', async () => {
+    const body = request();
+    if (JSON.stringify(body) !== _previewKey) { msg($('applyMsg'), 'The selection changed. Preview again.', 'bad'); return; }
+    if (!confirm(`Apply the hiatus to ${plural(body.contract_ids.length, 'contract')}?\n\nSpots on the hiatus days are pulled from the schedule. A backup is kept.`)) return;
+    $('applyBtn').disabled = true;
+    msg($('applyMsg'), 'Applying…');
+    try {
+        const data = await post('/api/orders/hiatus/apply', body);
+        renderApplied(data);
+        const bad = data.filter(r => r.error).length;
+        msg($('applyMsg'), bad ? `${plural(bad, 'contract')} failed; see below.` : 'Applied.', bad ? 'bad' : 'good');
+    } catch (e) {
+        msg($('applyMsg'), `Error: ${e.message}`, 'bad');
+        $('applyBtn').disabled = false;
+    }
+});
+
+function renderApplied(data) {
+    let html = '';
+    for (const r of data) {
+        const name = _picked.find(p => p.id === r.contract_id) || {};
+        if (r.error) {
+            html += `<div class="c-block">${banner(name.code || r.contract_id, name.description)}<div class="c-summary"><span class="warn">Not applied, nothing changed: ${escHtml(r.error)}</span></div></div>`;
+            continue;
+        }
+        let sum = `${plural(r.removed, 'spot')} pulled, ${plural(r.marked_rows, 'day mark')} added, max per day raised on ${plural(r.caps.length, 'line')}, ${plural(r.to_ready, 'line')} set to Ready.`;
+        if (r.note_added) sum += ` Note added: “${escHtml(r.hiatus_note)}”.`;
+        if (r.backup) sum += `<br>Backup: ${escHtml(r.backup)}`;
+        const c = r.check;
+        sum += `<br>Read back: ${c.placed} of ${c.ordered} placed, ${c.on_hiatus_days} on hiatus days, `;
+        sum += c.ghosts ? `<span class="warn">${plural(c.ghosts, 'ghost spot')} in the playlist</span>` : '<span class="good">no ghost spots</span>';
+        sum += `. ${plural(c.ordered - c.placed, 'spot')} to schedule.`;
+        html += `<div class="c-block">${banner(r.code, name.description, r.dates.map(mdy).join(', '))}<div class="c-summary">${sum}</div></div>`;
+    }
+    $('applyWrap').innerHTML = html;
+    $('checkWrap').innerHTML = '';
+    msg($('checkMsg'), '');
+    $('stepAfter').style.display = 'block';
+}
+
+$('checkBtn').addEventListener('click', async () => {
+    $('checkBtn').disabled = true;
+    msg($('checkMsg'), 'Counting…');
+    try {
+        const data = await post('/api/orders/hiatus/check', { contract_ids: _picked.map(c => c.id) });
+        let html = '', allOk = true;
+        for (const c of data) {
+            const name = _picked.find(p => p.id === c.contract_id) || {};
+            if (!c.ok) allOk = false;
+            let sum = c.ok ? '<span class="good">Good.</span> ' : '<span class="warn">Not finished.</span> ';
+            sum += `${c.placed} of ${c.ordered} placed. ${plural(c.on_hiatus_days, 'spot')} on hiatus days. `;
+            sum += c.ghosts ? `<span class="warn">${plural(c.ghosts, 'ghost spot')} in the playlist.</span>` : 'No ghost spots.';
+            if (c.blacklisted) sum += ` ${plural(c.blacklisted, 'spot')} on the blacklist.`;
+            if (c.short_lines.length) {
+                sum += `<br>${plural(c.short_lines.length, 'hiatus line')} still short:`;
+                for (const l of c.short_lines.slice(0, 40)) sum += `<br>&nbsp;&nbsp;${escHtml(l.market)} ${escHtml(l.description)}: ${l.placed} of ${l.ordered}${l.blacklisted ? `, ${l.blacklisted} blacklisted` : ''}`;
+            }
+            html += `<div class="c-block">${banner(c.code, name.description, c.excluded.map(e => mdy(e[0])).join(', '))}<div class="c-summary">${sum}</div></div>`;
+        }
+        $('checkWrap').innerHTML = html;
+        msg($('checkMsg'), allOk ? 'All contracts are good.' : 'See below. Schedule again in Etere if lines are short, then check again.', allOk ? 'good' : 'bad');
+    } catch (e) {
+        msg($('checkMsg'), `Error: ${e.message}`, 'bad');
+    } finally {
+        $('checkBtn').disabled = false;
+    }
+});
+</script>
+</body>
+</html>

@@ -11725,6 +11725,152 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     # ── Fix Overscheduled Contract ────────────────────────────────────────────
 
+    # ── Hiatus card (Lee 11/20): mark no-air days on contracts already entered ──────────────
+    @router.get("/orders/hiatus", response_class=HTMLResponse)
+    async def hiatus_page(request: Request):
+        return templates.TemplateResponse(request, "hiatus.html")
+
+    def _hiatus_dates_for(cur, contract_id: int, text: str):
+        """The typed dates, with a missing year taken from the contract's own flight."""
+        from browser_automation.hiatus import HiatusError, parse_hiatus_dates
+
+        cur.execute(
+            "SELECT DATA_INIZIO, DATA_TERMINE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
+            (contract_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HiatusError(f"contract {contract_id} not found")
+        d0, d1 = (v.date() if hasattr(v, "date") else v for v in row)
+        dates = parse_hiatus_dates(text, d0, d1)
+        if not dates:
+            raise HiatusError("no hiatus dates given")
+        return dates
+
+    def _hiatus_plan_json(p: dict) -> dict:
+        return {
+            "contract_id": p["contract_id"],
+            "code": p["code"],
+            "description": p["description"],
+            "dates": [d.isoformat() for d in p["dates"]],
+            "hiatus_note": p["hiatus_note"],
+            "note_present": p["hiatus_note"].lower() in p["note"].lower(),
+            "placed": p["placed"],
+            "aired": p["aired"],
+            "lines": [
+                {
+                    "line_id": ln["line_id"],
+                    "market": ln["market"],
+                    "description": ln["description"],
+                    "status": ln["status"],
+                    "to_mark": len(ln["to_mark"]),
+                    "already_marked": len(ln["dates"]) - len(ln["to_mark"]),
+                    "placed": ln["placed"],
+                    "aired": ln["aired"],
+                    "cap_old": ln["cap_old"],
+                    "cap_new": ln["cap_new"],
+                    "weekly": ln["weekly"],
+                    "dead_weeks": [m.isoformat() for m in ln["dead_weeks"]],
+                }
+                for ln in p["lines"]
+            ],
+        }
+
+    def _hiatus_check_json(c: dict) -> dict:
+        return {**c, "excluded": [[d.isoformat(), n] for d, n in c["excluded"]]}
+
+    @router.post("/api/orders/hiatus/preview")
+    async def hiatus_preview(request: Request):
+        body = await request.json()
+        ids = [int(i) for i in body.get("contract_ids") or []]
+        text = str(body.get("dates") or "")
+
+        def _run():
+            from browser_automation import hiatus
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            out = []
+            conn = _db_connect()
+            try:
+                cur = conn.cursor()
+                for cid in ids:
+                    try:
+                        dates = _hiatus_dates_for(cur, cid, text)
+                        out.append(_hiatus_plan_json(hiatus.plan(cur, cid, dates)))
+                    except (hiatus.HiatusError, ValueError) as exc:
+                        out.append({"contract_id": cid, "error": str(exc)})
+            finally:
+                conn.rollback()
+                conn.close()
+            return out
+
+        if not ids:
+            raise HTTPException(status_code=400, detail="Pick at least one contract.")
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/orders/hiatus/apply")
+    async def hiatus_apply(request: Request):
+        body = await request.json()
+        ids = [int(i) for i in body.get("contract_ids") or []]
+        text = str(body.get("dates") or "")
+
+        def _run():
+            from browser_automation import hiatus
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            out = []
+            for cid in ids:  # one transaction per contract: a refusal on one leaves the others whole
+                conn = _db_connect()
+                try:
+                    dates = _hiatus_dates_for(conn.cursor(), cid, text)
+                    r = hiatus.apply(conn, cid, dates, on_placed="remove")
+                    conn.commit()
+                except Exception as exc:
+                    conn.rollback()
+                    conn.close()
+                    out.append({"contract_id": cid, "error": str(exc)})
+                    continue
+                conn.close()
+                r["dates"] = [d.isoformat() for d in r["dates"]]
+                r["dead_weeks"] = [[lid, desc, m.isoformat()] for lid, desc, m in r["dead_weeks"]]
+                conn = _db_connect()  # readback on a fresh connection
+                try:
+                    r["check"] = _hiatus_check_json(hiatus.check(conn, cid))
+                finally:
+                    conn.close()
+                out.append(r)
+            return out
+
+        if not ids:
+            raise HTTPException(status_code=400, detail="Pick at least one contract.")
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/orders/hiatus/check")
+    async def hiatus_check(request: Request):
+        body = await request.json()
+        ids = [int(i) for i in body.get("contract_ids") or []]
+
+        def _run():
+            from browser_automation import hiatus
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            conn = _db_connect()
+            try:
+                return [_hiatus_check_json(hiatus.check(conn, cid)) for cid in ids]
+            finally:
+                conn.close()
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/orders/fix-overscheduled", response_class=HTMLResponse)
     async def fix_overscheduled_page(request: Request):
         return templates.TemplateResponse(request, "fix_overscheduled.html")

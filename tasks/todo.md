@@ -1283,3 +1283,16 @@ Rule (Lee): the :15 and :30 of one creative share a serial; the next serial come
 - [x] Page table and Excel export show `Language Block` after Time
 - [x] `tests/unit/test_asrun_language_block.py`; live read-only check on 3231 and 3027 (no blank blocks)
 - [ ] Lee: push; reply to Charmaine
+
+## Hiatus days: WorldLink entry prompt + Hiatus card (2026-11-20)
+
+- [x] One module, `browser_automation/hiatus.py`: plan / apply / check, date parsing, order wording detection
+- [x] `scripts/hiatus_exclude.py` calls the module (`--remove-placed` added)
+- [x] WorldLink gather asks for hiatus dates (order wording shown, its dates offered as the default); entry marks the days before the commit
+- [x] Hiatus card at `/orders/hiatus`: pick contracts, dates, preview, apply (pulls spots on the days from both tables), check
+- [x] Rehearsed on 3091 in a rolled-back transaction: 101 spots pulled, 0 playlist rows left, 0 ghosts, 36 lines to Ready
+- [ ] First live use of the card (Lee) and first WorldLink order entered with a hiatus
+
+### Review
+3089 and 3091 proved the process by hand (Change Data, mark, reschedule). The card replaces Change Data with a
+pull of only the spots on the hiatus days, so the reschedule places only those. Weekly cap is never written.
