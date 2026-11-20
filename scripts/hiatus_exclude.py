@@ -10,6 +10,12 @@ the contract whose flight and day pattern include the date. Dry run unless --app
 
 Refuses a line that still has spots placed on a hiatus day: unschedule first (Change Data on
 the line in the Etere app), then mark, then reschedule.
+
+Max per day (Lee 11/20: hiatus spots are made up, not dropped): the week that loses days must
+still hold its week's spots, so each affected line's daily cap is raised to
+ceil(spots per week / days left in that week). The weekly cap is not touched, so the make-ups
+stay in the week they were bought in. A cap is never lowered. 3089: Lines 12/13 M-F, 10 a
+week, 3 days left in the week of 12/21 -> cap 2 becomes 4; Line 14 M-Su keeps 2.
 """
 import argparse
 import datetime as dt
@@ -20,6 +26,27 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 DAY_COLS = ("LUNEDI", "MARTEDI", "MERCOLEDI", "GIOVEDI", "VENERDI", "SABATO", "DOMENICA")
+
+
+def needed_daily_cap(start, end, day_flags, excluded, total_spots, weekly_spots):
+    """(cap the hiatus weeks need, [weeks with no day left]) for one line.
+
+    Weeks run Monday-Sunday. Only weeks that lose a day to `excluded` are looked at.
+    weekly_spots 0 means the line has no weekly cap: the flight total is spread over its weeks.
+    """
+    excluded = {d for d in excluded if start <= d <= end and day_flags[d.weekday()]}
+    first_monday = start - dt.timedelta(days=start.weekday())
+    weeks = (end - first_monday).days // 7 + 1
+    per_week = weekly_spots or -(-total_spots // weeks)
+    cap, dead = 0, []
+    for monday in sorted({d - dt.timedelta(days=d.weekday()) for d in excluded}):
+        days = [monday + dt.timedelta(days=i) for i in range(7)]
+        left = [d for d in days if start <= d <= end and day_flags[d.weekday()] and d not in excluded]
+        if not left:
+            dead.append(monday)
+            continue
+        cap = max(cap, -(-per_week // len(left)))
+    return cap, dead
 
 
 def main():
@@ -50,15 +77,15 @@ def main():
     else:
         cur.execute(
             f"""SELECT ID_CONTRATTIRIGHE, RTRIM(DESCRIZIONE), COD_USER, DATESTART, DATEEND, ROWSTATUS,
-                       {", ".join(DAY_COLS)}
+                       N_PASSAGGI, PASSAGGI_GIORNALIERI, PASSAGGI_SETTIMANALI, {", ".join(DAY_COLS)}
                 FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s ORDER BY ID_CONTRATTIRIGHE""",
             (args.contract,),
         )
         lines = cur.fetchall()
         if not lines:
             sys.exit(f"contract {args.contract}: no lines")
-        todo, blocked = [], []
-        for lid, desc, mkt, d0, d1, status, *days in lines:
+        todo, blocked, caps = [], [], []
+        for lid, desc, mkt, d0, d1, status, n_tot, cap_day, cap_week, *days in lines:
             for d in dates:
                 if not (d0.date() <= d <= d1.date()) or not days[d.weekday()]:
                     continue
@@ -77,6 +104,14 @@ def main():
                 print(f"  line {lid} mkt {mkt} status {status} {desc}: {d} {'already marked' if have else 'to mark'}")
                 if not have:
                     todo.append((lid, d))
+            cur.execute("SELECT dateexclude FROM trf_contractdateexclude WHERE id_contrattirighe = %s", (lid,))
+            excl = {r[0].date() for r in cur.fetchall()} | {d for l, d in todo if l == lid}
+            need, dead = needed_daily_cap(d0.date(), d1.date(), days, excl, n_tot, cap_week)
+            for monday in dead:
+                print(f"  NOTE line {lid} {desc}: week of {monday} has no day left; its spots cannot be made up in that week")
+            if need > (cap_day or 0):
+                caps.append((lid, cap_day, need))
+                print(f"  line {lid} mkt {mkt} {desc}: max per day {cap_day} -> {need}")
         if blocked:
             for lid, desc, d in blocked:
                 print(f"REFUSED: line {lid} {desc} still has spots placed on {d}")
@@ -87,6 +122,9 @@ def main():
                 "INSERT INTO trf_contractdateexclude (id_contrattirighe, dateexclude) VALUES (%s, %s)",
                 (lid, d.isoformat()),
             )
+        for lid, _, need in caps:
+            cur.execute("UPDATE CONTRATTIRIGHE SET PASSAGGI_GIORNALIERI = %s WHERE ID_CONTRATTIRIGHE = %s", (need, lid))
+        print(f"{len(caps)} line(s) get a higher max per day")
         expected_rows = len(todo)
         print(f"{len(todo)} row(s) to add on {len({l for l, _ in todo})} line(s)")
 
@@ -112,6 +150,13 @@ def main():
         )
         print(f"readback: contract {args.contract} exclusions by date: {[(str(d), n) for d, n in cur.fetchall()]}"
               f" ({expected_rows} added this run)")
+        cur.execute(
+            """SELECT PASSAGGI_GIORNALIERI, COUNT(*) FROM CONTRATTIRIGHE cr WHERE cr.ID_CONTRATTITESTATA = %s
+               AND EXISTS (SELECT 1 FROM trf_contractdateexclude e WHERE e.id_contrattirighe = cr.ID_CONTRATTIRIGHE)
+               GROUP BY PASSAGGI_GIORNALIERI ORDER BY 1""",
+            (args.contract,),
+        )
+        print(f"readback: max per day on the marked lines (cap, lines): {cur.fetchall()}")
     conn.close()
 
 
