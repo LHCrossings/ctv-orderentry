@@ -35,6 +35,7 @@ from src.business_logic.services.finish_plan import (
     FCC_ID_ASSET,
     FPS,
     ID_MIN_AIR,
+    LONG_FORM_BREAK,
     Ev,
     Filler,
     accepted_id_assets,
@@ -44,6 +45,7 @@ from src.business_logic.services.finish_plan import (
     hms,
     load_day,
     load_inventory,
+    long_form_hour,
     missing_pieces,
     mmss,
     packed_remainder,
@@ -266,7 +268,15 @@ def plan_window(
     # show, market-day cap and spacing judged on the live playlist (campaign_psa.py).
     camp, camp_note = campaign_psa_for(cur, market, date, lo, hi, language, evs)
     protected = campaign_fids(cur, date) if camp_note else set()
-    breaks, notes = plan(evs, inv, hi, market, campaign=camp, protected=protected)
+    breaks, notes = plan(
+        evs,
+        inv,
+        hi,
+        market,
+        campaign=camp,
+        protected=protected,
+        interior_max=LONG_FORM_BREAK if long_form_hour(evs) else None,
+    )
     if camp_note and not camp:
         notes.append(camp_note)
     camp_seated = next(
@@ -527,11 +537,23 @@ def day_windows(market: int, date: str, rows: list[tuple]) -> list[dict]:
                 continue
             if hi <= lo:
                 hi += 24 * 3600
+            title = g.get("title") or ""
+            # The grid reader splits a DAL "Marketplace" hour into two half hours for Daily
+            # Programming (one long-form PI each). For Finish it is ONE show with one ID at
+            # the end (Lee 11/20: no station ID is needed at the half hour).
+            if (
+                out
+                and title.strip().lower() == "marketplace"
+                and out[-1]["title"].strip().lower() == "marketplace"
+                and abs(out[-1]["hi"] - lo) < 1
+            ):
+                out[-1]["hi"] = hi
+                continue
             out.append(
                 {
                     "lo": lo,
                     "hi": hi,
-                    "title": g.get("title") or "",
+                    "title": title,
                     "language": g.get("language") or "",
                     "source": "grid",
                 }

@@ -1296,3 +1296,10 @@ Rule (Lee): the :15 and :30 of one creative share a serial; the next serial come
 ### Review
 3089 and 3091 proved the process by hand (Change Data, mark, reschedule). The card replaces Change Data with a
 pull of only the spots on the hiatus days, so the reschedule places only those. Weekly cap is never written.
+
+## Fill & Finish: DAL Marketplace is one show with one ID (2026-11-20, Maija / Lee)
+
+- [x] Finish lists the two Marketplace half hours as ONE 60-minute show (`day_windows`); Daily Programming keeps its two slots
+- [x] Long-form hour rule in the planner: first break at most 1:30 of commercials / PIs, no ID; PSAs and the one ID in the second break
+- [x] Tests `tests/unit/test_finish_marketplace_hour.py`; rolled-back write on DAL 11/20 23:00 (FCC ID kept as the hour's ID)
+- [ ] Maija confirms on the next DAL day

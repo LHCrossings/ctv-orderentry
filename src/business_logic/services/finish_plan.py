@@ -33,6 +33,11 @@ ID_MIN_AIR = 5.0
 ID_TARGET_MAX = 10.0
 FINAL_BREAK_MAX = 150.0  # 2:30 — Lee
 FINAL_BREAK_SPILL = 180.0  # ≥3:00 → spill PIs into interior breaks
+# A long-form hour (DAL Marketplace, Lee 11/20): two 28:30 infomercials, 1:30 after each.
+# The break between them holds commercials / PIs up to 1:30 and no ID; the rest of the open
+# time, the PSAs and the one ID go after the second.
+LONG_FORM_BREAK = 90.0
+LONG_FORM_DESC = re.compile(r"^(?:WL)?PI-LF-", re.IGNORECASE)
 # Show openers that are not named BUMP_*_OPEN: the 10s religious-programming open that
 # precedes Kingdom of God (Ashe 9/28). No break belongs between an opener and its show.
 OPENER_CODE_PREFIXES = ("RELIGIOUSOPEN",)
@@ -333,6 +338,12 @@ def is_end_game(x) -> bool:
     return kind in ("PSA", "ID")
 
 
+def long_form_hour(evs: list[Ev]) -> bool:
+    """Two long-form infomercials back to back in one window (DAL Marketplace)."""
+    pieces = [e for e in evs if e.is_program]
+    return len(pieces) == 2 and all(LONG_FORM_DESC.match(e.desc or "") for e in pieces)
+
+
 def packed_remainder(evs: list[Ev], hour_end: float) -> float:
     """Seconds left before `hour_end` once every program, paid spot and existing
     PI/PSA in the window has aired back-to-back from the first program piece.
@@ -506,6 +517,7 @@ def plan(
     market: int,
     campaign: Filler | list[Filler] | None = None,
     protected: frozenset[int] | set[int] = frozenset(),
+    interior_max: float | None = None,
 ) -> tuple[list, list[str]]:
     """Fix it or finish it (Lee 8/28): existing fill stays as given; remove only
     what the end game needs (spill-over first, final break next, then the
@@ -515,7 +527,10 @@ def plan(
     `campaign` (Lee 10/21, campaign_psa.py): the campaign PSA candidates, least
     recently aired first; the first that fits the open time is seated in the
     shortest interior break, ahead of the PI fill (the cuts run 1:00 to 2:10). `protected` are the campaign's
-    asset ids: the FIX phase removes other fill before one of these."""
+    asset ids: the FIX phase removes other fill before one of these.
+
+    `interior_max` (long-form hour): no new fill takes an interior break past this length;
+    what does not fit goes to the final break (still at most 2:30)."""
     notes: list[str] = []
     old_ids = [e for e in evs if e.newtype == "ID"]
     # NOOPs are Etere/EE gap-fillers, i.e. empty time — never content (MMT bare test 8/28)
@@ -608,6 +623,8 @@ def plan(
             break
         x = pis[-1]
         target = min(interior, key=lambda b: b.length)
+        if interior_max is not None and target.length + x.dur > interior_max + 0.5:
+            break
         final.items.remove(x)
         target.items.append(x)
         moves.append(f"move {x.desc[:28]} ({mmss(x.dur)}) final → break {target.after_piece_idx}")
@@ -630,6 +647,8 @@ def plan(
         pick = next((c for c in cands if R - ID_MIN_AIR >= c.dur), None)
         if pick is not None:
             target = min(interior, key=lambda b: b.length) if interior else final
+            if interior_max is not None:
+                target = final  # long-form hour: PSAs belong to the second break (Lee 11/20)
             target.items.append(pick)
             used.add(pick.filmati)
             R -= pick.dur
@@ -650,8 +669,19 @@ def plan(
             return final_eff() if b is final else b.length
 
         longest_interior = max((b.length for b in interior), default=0.0)
-        final_ok = eff(final) + sec <= min(FINAL_BREAK_MAX, longest_interior) if interior else True
-        candidates = list(interior) + ([final] if final_ok else [])
+        if interior_max is None:
+            final_ok = eff(final) + sec <= min(FINAL_BREAK_MAX, longest_interior) if interior else True
+            candidates = list(interior) + ([final] if final_ok else [])
+        else:
+            # capped interior breaks: the final break takes what they cannot, up to 2:30
+            for sec in (sec, 30):
+                candidates = [b for b in interior if b.length + sec <= interior_max + 0.5]
+                if eff(final) + sec <= FINAL_BREAK_MAX:
+                    candidates.append(final)
+                if candidates:
+                    break
+            if not candidates:
+                break
         target = min(candidates, key=eff)
         f = take("PI", sec, target) or (take("PI", 30, target) if sec == 60 else None)
         if not f:
