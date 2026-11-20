@@ -1276,3 +1276,10 @@ Rule (Lee): the :15 and :30 of one creative share a serial; the next serial come
 - [x] `/scripts/spot-names` page + `POST /api/scripts/spot-names/propose`; tile on Control Room; reads and writes nothing in Etere; output pastes into Rename Assets
 - [x] Tests: `tests/unit/test_spot_names.py` (Woof list of 11/20 as fixture, the six Holiday spots as the oracle, route)
 - [ ] Lee: paste a real copy of the delivery page rows; the cell layout in the test is my reading of the screenshot
+
+## As-Run Report: Language Block column (Charmaine, 2026-11-20)
+
+- [x] By-contract payload: each airing carries `block`, the program block the spot was booked into (`trafficPalinse.offset` against the day's grid; air time as fallback)
+- [x] Page table and Excel export show `Language Block` after Time
+- [x] `tests/unit/test_asrun_language_block.py`; live read-only check on 3231 and 3027 (no blank blocks)
+- [ ] Lee: push; reply to Charmaine

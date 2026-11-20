@@ -261,6 +261,22 @@ def _build_excel(pivot: dict) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def _asrun_block_name(day_blocks: list, booked_offset, air_frames) -> str:
+    """Name of the program block a spot belongs to, "" when the grid has none.
+
+    The booked break (`trafficPalinse.offset`, the block column Etere shows) decides; the air
+    time is the fallback for a row with no booking offset. Both are frame-of-day on the
+    06:00-30:00 broadcast scale, like the grid's block offsets. Half-open [start, end).
+    """
+    for frames in (booked_offset, air_frames):
+        if frames is None:
+            continue
+        hits = [b for b in day_blocks if b[0] <= int(frames) < b[1]]
+        if hits:
+            return max(hits, key=lambda b: b[0])[2]
+    return ""
+
+
 def _build_asrun_excel(payload: dict) -> bytes:
     """As-run-by-contract → one flat, filterable sheet.
 
@@ -293,7 +309,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
     ws = wb.active
     ws.title = "As-Run"
 
-    COLS = ["Market", "Date", "Time", "Spot Code", "Title", "Type", "Rate"]
+    COLS = ["Market", "Date", "Time", "Language Block", "Spot Code", "Title", "Type", "Rate"]
     last_col = get_column_letter(len(COLS))
 
     ws.merge_cells(f"A1:{last_col}1")
@@ -323,7 +339,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
         c = ws.cell(hr, i, label)
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = fill(BLUE)
-        c.alignment = lft if label in ("Title", "Spot Code") else ctr
+        c.alignment = lft if label in ("Title", "Spot Code", "Language Block") else ctr
         c.border = bdr()
 
     r = hr
@@ -348,6 +364,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
                 mkt["market"],
                 d_val,
                 a["time"],
+                a.get("block", ""),
                 a["spot_code"],
                 a["spot_title"],
                 a["type"],
@@ -357,12 +374,12 @@ def _build_asrun_excel(payload: dict) -> bytes:
                 c = ws.cell(r, i, v)
                 c.fill = fill(bg)
                 c.border = bdr()
-                c.alignment = lft if i in (4, 5) else ctr
+                c.alignment = lft if i in (4, 5, 6) else ctr
                 if is_bns:
                     c.font = Font(italic=True)
                 if i == 2:
                     c.number_format = "M/D/YY"
-                if i == 7:
+                if i == len(COLS):
                     c.number_format = "$#,##0.00"
 
     if r > hr:
@@ -390,7 +407,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
     c.border = bdr()
     c.number_format = "$#,##0.00"
 
-    for col, width in zip("ABCDEFG", (10, 11, 10, 18, 42, 8, 12)):
+    for col, width in zip("ABCDEFGH", (10, 11, 10, 34, 18, 42, 8, 12)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = f"A{hr + 1}"
 
@@ -672,7 +689,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                 )
                 hdr = cur.fetchone()
                 if not hdr:
-                    return None, []
+                    return None, [], {}
 
                 cur.execute(
                     """
@@ -682,7 +699,8 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                         tp.ORA                             AS time_frames,
                         ISNULL(f.COD_PROGRA, tp.TITLE)     AS spot_code,
                         ISNULL(f.DESCRIZIO, '')            AS spot_title,
-                        ISNULL(cr.IMPORTO, 0)              AS rate
+                        ISNULL(cr.IMPORTO, 0)              AS rate,
+                        tpa.offset                         AS booked_offset
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa
                         ON tpa.id_tpalinse = tp.ID_TPALINSE
@@ -701,10 +719,31 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                     (contract_id, d_from.isoformat(), d_to.isoformat()),
                 )
                 rows = cur.fetchall()
-            return hdr, rows
+                # The program grid for the same days: the block a spot was booked into is the
+                # "language block" Etere shows (name "<language prefix> - <program>").
+                blocks: dict = {}
+                mkts = sorted({int(r["market_id"]) for r in rows})
+                if mkts:
+                    cur.execute(
+                        f"""
+                        SELECT CAST(tc.Date AS DATE) AS d, tb.cod_user AS market_id,
+                               RTRIM(tb.name) AS name, ts.Offset AS start_f, tb.Duration AS dur_f
+                        FROM Traffic_Calendar tc
+                        JOIN traffic_scheduleblock ts ON ts.id_trafficschedule = tc.id_trafficschedule
+                        JOIN traffic_block tb ON tb.id_trafficblock = ts.id_trafficblock
+                        WHERE tc.Date BETWEEN %s AND %s AND tc.Level = 0
+                          AND tb.cod_user IN ({",".join("%s" for _ in mkts)})
+                    """,
+                        (d_from.isoformat(), d_to.isoformat(), *mkts),
+                    )
+                    for b in cur.fetchall():
+                        blocks.setdefault((int(b["market_id"]), str(b["d"])), []).append(
+                            (int(b["start_f"]), int(b["start_f"]) + int(b["dur_f"] or 0), b["name"] or "")
+                        )
+            return hdr, rows, blocks
 
         try:
-            hdr, rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+            hdr, rows, blocks = await asyncio.get_running_loop().run_in_executor(None, _run)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -720,6 +759,11 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             rate = float(r["rate"] or 0)
             by_market[mcode].append(
                 {
+                    "block": _asrun_block_name(
+                        blocks.get((int(mid), str(r["air_date"])), []),
+                        r["booked_offset"],
+                        r["time_frames"],
+                    ),
                     "date": str(r["air_date"]),
                     "time": _frames_to_time(r["time_frames"]),
                     "spot_code": r["spot_code"] or "",

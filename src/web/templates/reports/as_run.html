@@ -623,14 +623,14 @@
                 </div>
                 <table class="airing-table">
                     <thead><tr>
-                        <th>Date</th><th>Time</th><th>Spot</th><th>Title</th><th>Type</th><th>Rate</th>
+                        <th>Date</th><th>Time</th><th>Language Block</th><th>Spot</th><th>Title</th><th>Type</th><th>Rate</th>
                     </tr></thead>
                     <tbody>`;
 
             let lastDate = null;
             mkt.airings.forEach(a => {
                 if (a.date !== lastDate) {
-                    html += `<tr class="date-row"><td colspan="6">${esc(a.date)}</td></tr>`;
+                    html += `<tr class="date-row"><td colspan="7">${esc(a.date)}</td></tr>`;
                     lastDate = a.date;
                 }
                 const typeClass = a.type === 'BNS' ? 'type-bns' : 'type-com';
@@ -638,6 +638,7 @@
                 html += `<tr>
                     <td></td>
                     <td class="airing-time">${esc(a.time)}</td>
+                    <td>${esc(a.block || '')}</td>
                     <td><strong>${esc(a.spot_code)}</strong></td>
                     <td>${esc(a.spot_title)}</td>
                     <td class="${typeClass}">${esc(a.type)}</td>
