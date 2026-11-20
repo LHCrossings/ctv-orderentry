@@ -208,9 +208,9 @@ def main():
                GROUP BY PASSAGGI_GIORNALIERI ORDER BY 1""",
             (args.contract,),
         )
+        print(f"readback: max per day on the marked lines (cap, lines): {cur.fetchall()}")
         cur.execute("SELECT CAST(NOTE AS NVARCHAR(MAX)) FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (args.contract,))
         print(f"readback: contract note: {cur.fetchone()[0]!r}")
-        print(f"readback: max per day on the marked lines (cap, lines): {cur.fetchall()}")
     conn.close()
 
 
