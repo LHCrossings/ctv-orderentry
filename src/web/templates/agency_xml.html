@@ -76,7 +76,7 @@
         .sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
         .sheet-head input[type=checkbox] { width: 18px; height: 18px; }
         .sheet-head h2 { margin: 0; }
-        .sheet-head .sub { font-size: 0.85rem; color: var(--text-secondary); }
+        .sheet-head .sub, td .sub { font-size: 0.85rem; color: var(--text-secondary); }
         .bw-card.off .sheet-body { opacity: 0.45; }
         .form-grid-3 { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px 28px; margin-bottom: 14px; }
     </style>
@@ -206,7 +206,23 @@
         }
     }
 
+    // "2027-02-01" -> "2/1"
+    function shortDate(iso) { const p = iso.split('-'); return (+p[1]) + '/' + (+p[2]); }
+
     function sheetCard(sh, i) {
+        // Hiatus weeks: weeks inside the flight with no spots. Listed once above the
+        // table when every airtime line skips the same weeks, else on each row.
+        const air = sh.lines.filter(ln => !ln.is_charge);
+        const keys = air.map(ln => (ln.hiatus || []).join(','));
+        const common = keys.length && keys.every(k => k === keys[0]) ? (air[0].hiatus || []) : null;
+        const hiatusLine = (common && common.length)
+            ? `<p class="flight-line">Not one continuous flight: <b>${air[0].weeks_on}</b> week(s) ordered, <b>${common.length}</b> hiatus week(s) with no spots. Hiatus weeks of: ${common.map(shortDate).join(', ')}</p>`
+            : '';
+        const rowHiatus = ln => {
+            const h = ln.hiatus || [];
+            if (!h.length) return '';
+            return `<br><span class="sub">${ln.weeks_on} wk on, ${h.length} hiatus${common ? '' : ': ' + h.map(shortDate).join(', ')}</span>`;
+        };
         const rows = sh.lines.map(ln => `
             <tr${ln.is_charge ? ' class="charge-row"' : ''}>
                 <td>${esc(ln.program)}</td>
@@ -215,7 +231,7 @@
                 <td class="num">${ln.length_sec ? ':' + ln.length_sec : '—'}</td>
                 <td class="num">${money(ln.rate)}</td>
                 <td class="num">${ln.total_spots}</td>
-                <td>${ln.start} → ${ln.end}</td>
+                <td>${ln.start} → ${ln.end}${rowHiatus(ln)}</td>
             </tr>`).join('');
         const fields = PER_TAB.map(k => `
             <div class="form-group">
@@ -231,6 +247,7 @@
             </div>
             <div class="sheet-body">
                 <p class="flight-line"><b>${esc(sh.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${sh.flight_start}</b> to <b>${sh.flight_end}</b> &nbsp;·&nbsp; ${sh.lines.length} line(s) &nbsp;·&nbsp; airtime <b>${money(sh.paid_total)}</b>${sh.charge_total ? ` + production <b>${money(sh.charge_total)}</b>` : ''}</p>
+                ${hiatusLine}
                 <div class="form-grid-3">${fields}</div>
                 <div class="table-wrap">
                     <table>

@@ -461,6 +461,20 @@ def _periods(line: ExportLine) -> List[tuple]:
     return out
 
 
+def hiatus_weeks(line: ExportLine) -> List[date]:
+    """Start dates of the calendar weeks INSIDE the line's flight that carry no spots:
+    the gaps between its ordered periods. The page lists them so a first-to-last flight
+    date does not read as one continuous order."""
+    out: List[date] = []
+    periods = _periods(line)
+    for (_, prev_end, _), (nxt_start, _, _) in zip(periods, periods[1:]):
+        d = prev_end + timedelta(days=1)
+        while d < nxt_start:
+            out.append(d)
+            d += timedelta(days=7)
+    return out
+
+
 def _spans(line: ExportLine) -> List[tuple]:
     """(start, end) blocks of listed calendar weeks inside the line's flight, for the
     rate-only shape: one block when the sheet lists every week (the ingested file)."""

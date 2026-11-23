@@ -34,6 +34,7 @@ from browser_automation.generators.agency_xml_export import (  # noqa: E402
     build_preview,
     default_header,
     export_proposal,
+    hiatus_weeks,
     needs_spot_length,
     proposal_tabs,
     read_proposal,
@@ -82,6 +83,8 @@ def _lines_json(preview) -> list:
             "start": ln.start.isoformat(),
             "end": ln.end.isoformat(),
             "total_spots": sum(ln.weekly_spots),
+            "weeks_on": sum(1 for c in ln.weekly_spots if c > 0),
+            "hiatus": [] if ln.is_charge else [d.isoformat() for d in hiatus_weeks(ln)],
             "is_charge": ln.is_charge,
         }
         for ln in preview.lines

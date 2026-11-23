@@ -172,6 +172,10 @@ def test_page_asks_for_the_spot_length_and_downloads(tmp_path, monkeypatch):
     sheet = pv["sheets"][0]
     assert (sheet["proposal_id"], sheet["paid_total"]) == ("TCAA-2027", 118800.0)
     assert sheet["lines"][0]["length_sec"] == 0
+    # The page names the weeks with no spots: 50 weeks first to last, 36 ordered.
+    for ln in sheet["lines"]:
+        assert ln["weeks_on"] == 36 and len(ln["hiatus"]) == 14
+    assert sheet["lines"][0]["hiatus"][:3] == ["2027-02-01", "2027-03-01", "2027-03-29"]
 
     import json
 
@@ -189,3 +193,28 @@ def test_page_asks_for_the_spot_length_and_downloads(tmp_path, monkeypatch):
     assert refused.status_code == 400 and "spot length" in refused.json()["detail"]
     ok = post("/orders/agency-xml/generate", spot_length="30", **form)
     assert ok.status_code == 200 and ok.content.count(b"<SpotsPerWeek>") == 11 * 12
+
+
+def test_hiatus_weeks_are_the_gaps_between_the_ordered_periods(order):
+    pv = ax.build_preview(order, _header(order))
+    for line in pv.lines:
+        gaps = ax.hiatus_weeks(line)
+        assert len(gaps) == 14 and not set(gaps) & set(order.week_dates)
+        assert all(d.weekday() == 0 and line.start < d < line.end for d in gaps)
+        on = sum(1 for c in line.weekly_spots if c > 0)
+        assert on + len(gaps) == ((line.end - line.start).days + 1) // 7
+
+
+def test_a_continuous_line_has_no_hiatus():
+    line = ax.ExportLine(
+        "P",
+        "D",
+        [],
+        30,
+        1.0,
+        date(2027, 1, 4),
+        date(2027, 1, 24),
+        [2, 3, 2],
+        [date(2027, 1, 4), date(2027, 1, 11), date(2027, 1, 18)],
+    )
+    assert ax.hiatus_weeks(line) == []
