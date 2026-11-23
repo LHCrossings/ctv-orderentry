@@ -51,11 +51,11 @@
             font-size: 0.82rem; font-weight: 600; color: var(--text-secondary);
             text-transform: uppercase; letter-spacing: 0.04em;
         }
-        .form-group input {
+        .form-group input, .form-group select {
             padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px;
             font-family: inherit; font-size: 0.92rem; color: var(--text-primary); background: white;
         }
-        .form-group input:focus { outline: none; border-color: var(--accent-primary); }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent-primary); }
         .form-group .hint { font-size: 0.78rem; color: var(--text-muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
         .form-check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--text-secondary); margin-top: 16px; }
         .btn-generate {
@@ -104,7 +104,7 @@
         <div class="upload-zone" id="ax-zone">
             <input type="file" id="ax-input" accept=".xlsm,.xlsx" />
             <div class="upload-icon">📊</div>
-            <p>Drop the Crossings TV Media Proposal (.xlsm / .xlsx) here</p>
+            <p>Drop the Crossings TV Media Proposal or the TCAA annual grid (.xlsm / .xlsx) here</p>
             <p>or click to browse</p>
             <div class="file-name" id="ax-filename"></div>
         </div>
@@ -140,10 +140,19 @@
                 <label for="f-send_date">Send date</label>
                 <input id="f-send_date" name="send_date" type="date" />
             </div>
+            <div class="form-group" id="g-spot_length" style="display:none">
+                <label for="f-spot_length">Spot length <span class="hint">the sheet does not state it</span></label>
+                <select id="f-spot_length" name="spot_length">
+                    <option value="">Choose…</option>
+                    <option value="15">:15</option>
+                    <option value="30">:30</option>
+                    <option value="60">:60</option>
+                </select>
+            </div>
         </div>
         <label class="form-check">
-            <input type="checkbox" id="f-include_spots_per_week" name="include_spots_per_week" value="1" />
-            Include weekly spot counts (SpotsPerWeek) — off matches the file the agency ingested
+            <input type="checkbox" id="f-include_spots_per_week" name="include_spots_per_week" value="1" checked />
+            Include weekly spot counts (SpotsPerWeek) — untick for rates only
         </label>
         <button type="button" class="btn-generate" id="ax-generate">&#8595; Download XML</button>
         <div class="status-msg" id="ax-form-status"></div>
@@ -158,6 +167,7 @@
     const LABELS = { proposal_id: 'Proposal ID', proposal_name: 'Proposal name', product: 'Product' };
     let workbook = null;
     let sheets = [];
+    let needLength = false;
 
     const $ = id => document.getElementById(id);
     function showStatus(el, msg, type) { el.textContent = msg; el.className = 'status-msg ' + type; }
@@ -202,7 +212,7 @@
                 <td>${esc(ln.program)}</td>
                 <td>${esc(ln.daypart_name)}</td>
                 <td>${ln.windows.map(w => esc(w.days) + ' ' + w.start + '–' + w.end).join('<br>')}</td>
-                <td class="num">:${ln.length_sec}</td>
+                <td class="num">${ln.length_sec ? ':' + ln.length_sec : '—'}</td>
                 <td class="num">${money(ln.rate)}</td>
                 <td class="num">${ln.total_spots}</td>
                 <td>${ln.start} → ${ln.end}</td>
@@ -243,6 +253,9 @@
         SHARED.forEach(k => { $('f-' + k).value = p.shared[k] || ''; });
         $('f-buyer_company-hint').textContent = p.shared.sheet_agency
             ? `the sheet's Agency cell says “${p.shared.sheet_agency}”` : 'the sheet has no Agency cell — type the agency';
+        needLength = !!p.shared.needs_spot_length;
+        $('g-spot_length').style.display = needLength ? 'flex' : 'none';
+        $('f-spot_length').value = '';
         $('ax-form-card').classList.remove('hidden');
         if (!$('f-call_letters').value) $('f-call_letters').focus();
     }
@@ -263,6 +276,10 @@
         fd.append('sheets', JSON.stringify(picked));
         SHARED.forEach(k => fd.append(k, $('f-' + k).value.trim()));
         if ($('f-include_spots_per_week').checked) fd.append('include_spots_per_week', '1');
+        if (needLength) {
+            if (!$('f-spot_length').value) { showStatus(status, 'Choose the spot length; the sheet does not state it.', 'error'); return; }
+            fd.append('spot_length', $('f-spot_length').value);
+        }
         this.disabled = true;
         try {
             const resp = await fetch('/orders/agency-xml/generate', { method: 'POST', body: fd });

@@ -34,12 +34,11 @@ from browser_automation.generators.agency_xml_export import (  # noqa: E402
     build_preview,
     default_header,
     export_proposal,
+    needs_spot_length,
+    proposal_tabs,
+    read_proposal,
     remember_header,
     suggested_filename,
-)
-from browser_automation.parsers.crispin_parser import (  # noqa: E402
-    parse_crispin_xlsx,
-    proposal_sheet_names,
 )
 
 _ACCEPTED = {".xlsx", ".xlsm"}
@@ -57,7 +56,7 @@ async def _save_upload(upload: UploadFile) -> str:
 
 def _parse_sheet(path: str, sheet: str):
     try:
-        return parse_crispin_xlsx(path, sheet)
+        return read_proposal(path, sheet)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Tab '{sheet}': {exc}")
 
@@ -100,17 +99,19 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
     async def preview(workbook: UploadFile = File(...)):
         tmp_path = await _save_upload(workbook)
         try:
-            names = proposal_sheet_names(tmp_path)
+            names = proposal_tabs(tmp_path)
             if not names:
                 raise HTTPException(
-                    status_code=400, detail="No tab with a Language / Daypart grid was found."
+                    status_code=400,
+                    detail="No tab with a Language / Daypart grid or a Program / TIME / "
+                    "Gross grid was found.",
                 )
             sheets = []
             shared = None
             for name in names:
                 order = _parse_sheet(tmp_path, name)
                 try:
-                    pv = build_preview(order, default_header(order))
+                    pv = build_preview(order, default_header(order), allow_unknown_length=True)
                 except AgencyXmlError as exc:
                     raise HTTPException(status_code=400, detail=f"Tab '{name}': {exc}")
                 h = pv.header
@@ -123,7 +124,11 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
                         "call_letters": h.call_letters,
                         "salesperson": h.salesperson,
                         "send_date": (h.send_date or date.today()).isoformat(),
+                        "needs_spot_length": False,
                     }
+                shared["needs_spot_length"] = shared["needs_spot_length"] or needs_spot_length(
+                    order
+                )
                 sheets.append(
                     {
                         "sheet": name,
@@ -168,6 +173,7 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
         salesperson: str = Form(""),
         send_date: str = Form(""),
         include_spots_per_week: str = Form(""),
+        spot_length: str = Form(""),
     ):
         try:
             wanted = json.loads(sheets or "[]")
@@ -180,6 +186,14 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
             sd = date.fromisoformat(send_date) if send_date.strip() else date.today()
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Send date '{send_date}' is not a date.")
+        try:
+            length = int(spot_length) if spot_length.strip() else None
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail=f"Spot length '{spot_length}' is not a number."
+            )
+        if length is not None and not (5 <= length <= 120):
+            raise HTTPException(status_code=400, detail="Spot length must be 5 to 120 seconds.")
         ids = [str(w.get("proposal_id", "")).strip() for w in wanted]
         if len(set(ids)) != len(ids):
             raise HTTPException(
@@ -205,6 +219,7 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
                     send_date=sd,
                     include_spots_per_week=include_spots_per_week.strip().lower()
                     in ("1", "true", "on", "yes"),
+                    spot_length_sec=length,
                 )
                 try:
                     outputs.append((suggested_filename(header), export_proposal(order, header)))

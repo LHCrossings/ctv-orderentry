@@ -1303,3 +1303,16 @@ pull of only the spots on the hiatus days, so the reschedule places only those. 
 - [x] Long-form hour rule in the planner: first break at most 1:30 of commercials / PIs, no ID; PSAs and the one ID in the second break
 - [x] Tests `tests/unit/test_finish_marketplace_hour.py`; rolled-back write on DAL 11/20 23:00 (FCC ID kept as the hour's ID)
 - [ ] Maija confirms on the next DAL day
+
+## Agency XML Export: TCAA annual grid (2026-11-23, Lee / Charmaine)
+
+- [x] Second reader `tcaa_grid_parser.parse_tcaa_grid_xlsx` (Program / TIME / Gross, three weeks a month) behind `agency_xml_export.read_proposal`
+- [x] Week dates must be Mondays, ascending, in the sheet's year; rows and footer reconciled; refusals name the cell
+- [x] Periods never cover a week the sheet does not list; page asks for the spot length; weekly spot counts ticked by default
+- [x] Tests `tests/unit/test_agency_xml_tcaa_grid.py`; BAAQMD oracle test unchanged and green
+- [ ] Lee: September week cells AC8:AE8 are Tuesdays (9/7, 9/14, 9/21); the page refuses the file until they are Mondays
+- [ ] Charmaine: station code in TCAA's system, buyer contact, spot length at first export
+
+### Review
+Fixture is the 11/23 workbook with the September cells set to 9/6, 9/13, 9/20. Export of it: 11 lines,
+12 periods each, 6,552 spots, $118,800, schema-valid.

@@ -44,7 +44,16 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
-from browser_automation.parsers.crispin_parser import CrispinLine, CrispinOrder
+from browser_automation.parsers.crispin_parser import (
+    CrispinLine,
+    CrispinOrder,
+    parse_crispin_xlsx,
+    proposal_sheet_names,
+)
+from browser_automation.parsers.tcaa_grid_parser import (
+    parse_tcaa_grid_xlsx,
+    tcaa_grid_sheet_names,
+)
 
 NS_PROPOSAL = "http://www.AAAA.org/schemas/spotTVCableProposal"
 NS_TVB = "http://www.AAAA.org/schemas/spotTV"
@@ -129,6 +138,8 @@ class ExportHeader:
     version: int = 1
     send_date: Optional[date] = None
     include_spots_per_week: bool = False
+    # Used only for a line whose sheet states no length (the TCAA annual grid).
+    spot_length_sec: Optional[int] = None
 
     def require(self) -> None:
         missing = [
@@ -330,19 +341,46 @@ def _line_span(ln: CrispinLine) -> tuple:
     return active[0], active[-1] + timedelta(days=6)
 
 
-def build_preview(order: CrispinOrder, header: Optional[ExportHeader] = None) -> ExportPreview:
+def proposal_tabs(path: str) -> List[str]:
+    """Every tab either reader can export: the standard media proposal (Language /
+    Daypart grid) or the TCAA annual grid (Program / TIME / Gross)."""
+    names = proposal_sheet_names(path)
+    return names + [n for n in tcaa_grid_sheet_names(path) if n not in names]
+
+
+def read_proposal(path: str, sheet_name: Optional[str] = None) -> CrispinOrder:
+    """One dispatcher, two readers, one order shape."""
+    grid_tabs = tcaa_grid_sheet_names(path)
+    standard_tabs = proposal_sheet_names(path)
+    if sheet_name in grid_tabs or (sheet_name is None and grid_tabs and not standard_tabs):
+        return parse_tcaa_grid_xlsx(path, sheet_name)
+    return parse_crispin_xlsx(path, sheet_name)
+
+
+def needs_spot_length(order: CrispinOrder) -> bool:
+    return any(not ln.length_sec for ln in order.lines)
+
+
+def build_preview(
+    order: CrispinOrder,
+    header: Optional[ExportHeader] = None,
+    allow_unknown_length: bool = False,
+) -> ExportPreview:
     header = header or default_header(order)
     if not order.lines:
         raise AgencyXmlError("the workbook has no airtime lines")
     lines: List[ExportLine] = []
     for ln in order.lines:
         start, end = _line_span(ln)
+        length = int(ln.length_sec or header.spot_length_sec or 0)
+        if length <= 0 and not allow_unknown_length:
+            raise AgencyXmlError("the sheet does not state a spot length; choose one")
         lines.append(
             ExportLine(
                 program=" ".join(ln.language_block.split()),
                 daypart_name=language_family(ln.language_block),
                 day_times=parse_daypart(ln.daypart),
-                length_sec=int(ln.length_sec),
+                length_sec=length,
                 rate=float(ln.rate),
                 start=start,
                 end=end,
@@ -398,8 +436,16 @@ def _sub(parent: ET.Element, tag: str, text=None, **attrs) -> ET.Element:
     return el
 
 
+def _adjacent(line: ExportLine, j: int) -> bool:
+    """Week column j+1 is the calendar week after column j (a sheet can skip weeks)."""
+    return line.week_dates[j + 1] - line.week_dates[j] == timedelta(days=7)
+
+
 def _periods(line: ExportLine) -> List[tuple]:
-    """Consolidate weekly counts into (start, end, spots) runs, dropping zero weeks."""
+    """Consolidate weekly counts into (start, end, spots) runs, dropping zero weeks.
+
+    A run also ends where the sheet skips a calendar week (the TCAA grid has three
+    week columns per month): a period never covers a week the sheet does not list."""
     out: List[tuple] = []
     i, n = 0, len(line.weekly_spots)
     while i < n:
@@ -408,11 +454,25 @@ def _periods(line: ExportLine) -> List[tuple]:
             i += 1
             continue
         j = i
-        while j + 1 < n and line.weekly_spots[j + 1] == c:
+        while j + 1 < n and line.weekly_spots[j + 1] == c and _adjacent(line, j):
             j += 1
         out.append((line.week_dates[i], line.week_dates[j] + timedelta(days=6), c))
         i = j + 1
     return out
+
+
+def _spans(line: ExportLine) -> List[tuple]:
+    """(start, end) blocks of listed calendar weeks inside the line's flight, for the
+    rate-only shape: one block when the sheet lists every week (the ingested file)."""
+    idx = [i for i, d in enumerate(line.week_dates) if line.start <= d <= line.end]
+    out: List[tuple] = []
+    for i in idx:
+        d = line.week_dates[i]
+        if out and d - out[-1][1] == timedelta(days=1):
+            out[-1] = (out[-1][0], d + timedelta(days=6))
+        else:
+            out.append((d, d + timedelta(days=6)))
+    return out or [(line.start, line.end)]
 
 
 def build_proposal_xml(preview: ExportPreview) -> bytes:
@@ -500,13 +560,14 @@ def build_proposal_xml(preview: ExportPreview) -> bytes:
                 _sub(dp, _q("Rate"), f"{line.rate:.2f}")
                 _sub(dp, _q("SpotsPerWeek"), spots)
         else:
-            dp = _sub(
-                periods,
-                _q("DetailedPeriod"),
-                startDate=line.start.isoformat(),
-                endDate=line.end.isoformat(),
-            )
-            _sub(dp, _q("Rate"), f"{line.rate:.2f}")
+            for start, end in _spans(line):
+                dp = _sub(
+                    periods,
+                    _q("DetailedPeriod"),
+                    startDate=start.isoformat(),
+                    endDate=end.isoformat(),
+                )
+                _sub(dp, _q("Rate"), f"{line.rate:.2f}")
 
     ET.indent(root, space="\t")
     return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="utf-8") + b"\n"
