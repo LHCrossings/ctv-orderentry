@@ -169,3 +169,43 @@ def test_a_blank_page_is_skipped():
         ("Page 2 of 2\nNotes", []),
     ]
     assert len(ttp.build_instruction(pages, 2026).periods) == 1
+
+
+# ── a ONE-DAY flight prints a single date, no range (Lee, 2026-11-24) ─────────
+
+FIXTURE_1130 = _root / "tests" / "fixtures" / "tatari" / "lectric_ebikes_week_of_11-30-26.pdf"
+
+
+def test_a_single_date_flight_is_a_one_day_window():
+    pages = [
+        (TEXT, [_isci_table(["Ad A", "WOOFA30H", "30s", "100%"]), _flight_table("5/19 - 5/24")]),
+        ("", [_isci_table(["Ad B", "WOOFB30H", "30s", "100%"]), _flight_table("5/18")]),
+    ]
+    instr = ttp.build_instruction(pages, 2026)
+    assert [(p.date_from_sql, p.date_to_sql) for p in instr.periods] == [
+        ("2026-05-19", "2026-05-24"),
+        ("2026-05-18", "2026-05-18"),
+    ]
+
+
+def test_a_flight_cell_with_no_date_still_refuses():
+    pages = [(TEXT, [_isci_table(["Ad A", "WOOFA30H", "30s", "100%"]), _flight_table("TBD")])]
+    with pytest.raises(ValueError, match="page 1 .* no Flight dates"):
+        ttp.build_instruction(pages, 2026)
+
+
+def test_week_of_11_30_reads_the_one_day_page(real_pdfplumber):
+    ttp.pdfplumber = real_pdfplumber
+    instr = ttp.parse_tatari_traffic_pdf(FIXTURE_1130.read_bytes(), year=2026)
+    got = [
+        (p.date_from_sql, p.date_to_sql, [(s.isci, s.rotation_pct) for s in p.spots])
+        for p in instr.periods
+    ]
+    assert got == [
+        ("2026-12-01", "2026-12-06", [("MBLBSVV130H", 60.0), ("MBSBTTV130H", 40.0)]),
+        (
+            "2026-11-30",
+            "2026-11-30",
+            [("MBLBBSV130H", 50.0), ("MBLBSBV130H", 50.0), ("MBLBBTV160H", 100.0)],
+        ),
+    ]

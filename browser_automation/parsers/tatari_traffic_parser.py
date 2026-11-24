@@ -141,10 +141,11 @@ def _page_flight(tables: List[list], year: int) -> Optional[Tuple[str, str, str,
             if not row or len(row) <= flight_col:
                 continue
             flight_str = str(row[flight_col] or "").strip()
-            m = re.search(r"(\d{1,2}/\d{1,2})\s*[-–]\s*(\d{1,2}/\d{1,2})", flight_str)
+            # A one-day flight prints a single date with no range ("11/30").
+            m = re.search(r"(\d{1,2}/\d{1,2})(?:\s*[-–]\s*(\d{1,2}/\d{1,2}))?", flight_str)
             if not m:
                 continue
-            from_disp, to_disp = m.group(1), m.group(2)
+            from_disp, to_disp = m.group(1), m.group(2) or m.group(1)
             from_sql = _parse_date(from_disp, year)
             to_sql = _parse_date(to_disp, year)
             if not from_sql or not to_sql:
