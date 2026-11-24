@@ -1,9 +1,9 @@
 """WorldLink / American Heart Association, week of 11/23-11/29/2026 (3191 CTV, 3199 TAC):
-add AHAHH2CCFH (Hold Me Closer Holiday) from 11/24.
+add AHAHH2CCFH (Hold Me Closer Holiday) from 11/25.
 
 The Rev 11-02 sheet gives five creatives 20% each for 11/23-11/29. HH was not
 delivered until 11/23 evening, so 11/23 aired on four creatives. This script moves
-enough of the unaired 11/24-11/29 spots onto HH that every creative ends the WEEK
+enough of the unaired 11/25-11/29 spots onto HH that every creative ends the WEEK
 at 20% (as near as whole spots allow), per contract and spread across markets and days.
 Only the spots that change are written; the rest keep their creative.
 
@@ -31,7 +31,7 @@ from browser_automation.etere_direct_client import connect  # noqa: E402
 SERVER = "http://localhost:8000"
 CONTRACTS = (3191, 3199)
 WEEK = ("2026-11-23", "2026-11-29")
-FROM = "2026-11-24"  # first day HH may air
+FROM = "2026-11-25"  # first day HH may air (Lee 11/24: start 11/25, not 11/24)
 HH = 154863
 ROTATION = {47240: "JO", 89413: "GH", 103550: "SJ", 103067: "SD", HH: "HH"}
 
