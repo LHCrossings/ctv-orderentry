@@ -50,31 +50,45 @@ _LANG_ALIASES = {
     "japanese": "Japanese",
     "english": "English",
 }
-_LANG_RE = re.compile(r"\b(" + "|".join(sorted(_LANG_ALIASES, key=len, reverse=True)) + r")\b",
-                      re.IGNORECASE)
+_LANG_RE = re.compile(
+    r"\b(" + "|".join(sorted(_LANG_ALIASES, key=len, reverse=True)) + r")\b", re.IGNORECASE
+)
 
 # MCI + language letter + 6-digit body (may contain letter-O typos) + trailing letters.
 _ISCI_RE = re.compile(r"\bMCI[A-Z][0-9O]{5,7}[A-Z]{0,3}\b")
-_DUR_RE = re.compile(r":(\d{2})s?\b")
+# The length is printed ":15", ":15s" or, since the December 2026 IOs, a bare "15s".
+_DUR_RE = re.compile(r"(?::(\d{2})s?|(?<![\w:])(\d{2})s)\b")
+
+
+def legend_duration(text: str):
+    """(seconds or None, matched text) from one legend line."""
+    m = _DUR_RE.search(text)
+    if not m:
+        return None, ""
+    return int(m.group(1) or m.group(2)), m.group(0)
+
+
 # Header boilerplate that shares a visual line with a legend row.
 _BOILER_RE = re.compile(
     r"\b(Order\s+Number|Order\s+Date|Version|Ref|Campaign|Campaign\s+Period|DMA)\s*:\s*\S+",
-    re.IGNORECASE)
-_ROW_TOL = 3.0          # pt; words within this of each other are one visual line
-_NEAR_DARK = 110        # pixel below this on all channels = glyph stroke, not fill
+    re.IGNORECASE,
+)
+_ROW_TOL = 3.0  # pt; words within this of each other are one visual line
+_NEAR_DARK = 110  # pixel below this on all channels = glyph stroke, not fill
 
 
 @dataclass
 class TextLegendRow:
     """Mirrors admerasia_vision.LegendRow (isci_code/duration_sec/color_rgb/color_name)
     so it is a drop-in replacement, plus the `language` the vision read cannot give."""
+
     isci_code: str
     duration_sec: int | None
     color_rgb: list
     color_name: str = ""
     language: str | None = None
     title: str = ""
-    raw_isci: str = ""          # as printed, before O→0 repair
+    raw_isci: str = ""  # as printed, before O→0 repair
 
 
 @dataclass
@@ -141,33 +155,38 @@ def read_text_legend(path: str) -> TextLegend:
             continue
         seen_span.add(span)
 
-        line = sorted([q for q in words if abs(q["top"] - w["top"]) < _ROW_TOL],
-                      key=lambda q: q["x0"])
+        line = sorted(
+            [q for q in words if abs(q["top"] - w["top"]) < _ROW_TOL], key=lambda q: q["x0"]
+        )
         text = " ".join(q["text"] for q in line)
         core = _BOILER_RE.sub("", text)
 
         lm = _LANG_RE.search(core)
-        dm = _DUR_RE.search(core)
+        dur_sec, dur_text = legend_duration(core)
         title = _ISCI_RE.sub("", core)
         if lm:
             title = title.replace(lm.group(0), "", 1)
-        if dm:
-            title = title.replace(dm.group(0), "", 1)
+        if dur_text:
+            title = title.replace(dur_text, "", 1)
 
         raw = w["text"].upper()
-        res.rows.append(TextLegendRow(
-            isci_code=normalize_isci(raw),
-            duration_sec=int(dm.group(1)) if dm else None,
-            color_rgb=_sample_fill(im, w["x0"], w["x1"], w["top"], w["bottom"]) or [255, 255, 255],
-            language=_LANG_ALIASES[lm.group(1).lower()] if lm else None,
-            title=" ".join(title.split()),
-            raw_isci=raw,
-        ))
+        res.rows.append(
+            TextLegendRow(
+                isci_code=normalize_isci(raw),
+                duration_sec=dur_sec,
+                color_rgb=_sample_fill(im, w["x0"], w["x1"], w["top"], w["bottom"])
+                or [255, 255, 255],
+                language=_LANG_ALIASES[lm.group(1).lower()] if lm else None,
+                title=" ".join(title.split()),
+                raw_isci=raw,
+            )
+        )
 
     for r in res.rows:
         if r.raw_isci != r.isci_code:
             res.warnings.append(
-                f"IO prints {r.raw_isci} (letter O for zero) — read as {r.isci_code}")
+                f"IO prints {r.raw_isci} (letter O for zero) — read as {r.isci_code}"
+            )
         if not r.language:
             res.warnings.append(f"no language on the legend row for {r.isci_code}")
         if r.duration_sec is None:
@@ -181,6 +200,7 @@ def read_text_legend(path: str) -> TextLegend:
         if len(titles) > 1:
             res.warnings.append(
                 f"{lang or '?'} ISCI {isci} is listed {len(titles)}x "
-                f"({'; '.join(t[:40] for t in titles)}) — likely an IO typo")
+                f"({'; '.join(t[:40] for t in titles)}) — likely an IO typo"
+            )
 
     return res

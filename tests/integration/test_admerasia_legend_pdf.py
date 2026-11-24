@@ -134,3 +134,35 @@ def test_duplicate_isci_typo_is_reported():
     a real agency error that must surface rather than silently mis-traffic."""
     L = _legend("TV-MD26-Chinese IO-Beverages Launch_Crossings.pdf")
     assert any("is listed 2x" in w for w in L.warnings), L.warnings
+
+
+# ── the length printed as a bare "15s" (McValue 5 December IOs, Lee 2026-11-24) ──
+
+_FIX = _root / "tests" / "fixtures" / "admerasia_traffic"
+
+
+@pytest.mark.parametrize(
+    "name,iscis,lang",
+    [
+        ("mcvalue5_dec_sf_06-MD10-2612VT.pdf", {"MCIV118526VH", "MCIV088526VH"}, "Vietnamese"),
+        ("mcvalue5_dec_seattle_11-MD10-2612CT.pdf", {"MCIM120526VH", "MCIM090526VH"}, "Mandarin"),
+    ],
+)
+def test_bare_15s_is_read_as_the_length(name, iscis, lang):
+    L = read_text_legend(str(_FIX / name))
+    assert L.ok, L.warnings
+    assert {r.isci_code for r in L.rows} == iscis
+    assert {r.language for r in L.rows} == {lang}
+    assert [r.duration_sec for r in L.rows] == [15, 15]
+    assert not [w for w in L.warnings if "no duration" in w]
+    assert all("15s" not in r.title.split() for r in L.rows)
+
+
+def test_legend_duration_shapes():
+    from browser_automation.parsers.admerasia_traffic_legend import legend_duration
+
+    assert legend_duration("Vietnamese :15 Title MCIV1")[0] == 15
+    assert legend_duration("Vietnamese :30s Title")[0] == 30
+    assert legend_duration("Vietnamese 15s 2026 McValue2.0_X_HD_15 MCIV1")[0] == 15
+    # a year, a file-name suffix and a clock time are not a length
+    assert legend_duration("2026 McValue2.0_HD_15 MCIV118526VH")[0] is None

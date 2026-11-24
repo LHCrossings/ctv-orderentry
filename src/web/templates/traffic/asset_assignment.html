@@ -1543,7 +1543,7 @@
                     <td style="padding:4px 8px;font-family:monospace;">${esc(s.isci)}</td>
                     ${multiLang ? `<td style="padding:4px 8px;font-weight:600;">${esc(s.language || '—')}</td>` : ''}
                     <td style="padding:4px 8px;color:var(--text-muted);">${esc(s.name || '')}</td>
-                    <td style="padding:4px 8px;text-align:center;">:${s.duration}</td>
+                    <td style="padding:4px 8px;text-align:center;">${s.duration ? ':' + s.duration : '—'}</td>
                     <td style="padding:4px 8px;text-align:center;font-weight:600;">${s.count}</td>
                 </tr>`).join('');
             const warnHtml = (r.warnings && r.warnings.length)
