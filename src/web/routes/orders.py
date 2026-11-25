@@ -3266,14 +3266,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         prior, bad_prior = _sn.parse_prior(str(payload.get("prior") or ""))
         delivered, bad_delivery = _sn.parse_delivery(str(payload.get("delivery") or ""))
         if not delivered:
-            raise HTTPException(status_code=400, detail="No spot found in the new spots box (ISCI, title, length).")
+            raise HTTPException(
+                status_code=400, detail="No spot found in the new spots box (ISCI, title, length)."
+            )
         raw_serial = str(payload.get("next_serial") or "").strip()
         if raw_serial and not raw_serial.isdigit():
             raise HTTPException(status_code=400, detail="Next serial must be a number.")
         try:
             rows = _sn.propose(
-                delivered, prior,
-                client=str(payload.get("client") or ""), lang=str(payload.get("lang") or ""),
+                delivered,
+                prior,
+                client=str(payload.get("client") or ""),
+                lang=str(payload.get("lang") or ""),
                 next_serial=int(raw_serial) if raw_serial else None,
                 order="pasted" if payload.get("order") == "pasted" else "isci",
                 simplify=bool(payload.get("simplify")),
@@ -8200,8 +8204,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         assignments = body.get("assignments", [])
         date_from = body.get("date_from")  # optional 'YYYY-MM-DD' — restrict to instruction period
         date_to = body.get("date_to")
+        # optional 'HH:MM': on date_to, leave spots at or after this time alone
+        cutoff_time = body.get("cutoff_time")
         if not assignments:
             raise HTTPException(status_code=400, detail="No assignments provided")
+        if cutoff_time and not (
+            re.match(r"^\d{2}:\d{2}$", str(cutoff_time))
+            and re.match(r"^\d{4}-\d{2}-\d{2}$", str(date_to or ""))
+        ):
+            raise HTTPException(status_code=400, detail="cutoff_time needs HH:MM and a date_to")
 
         def _run():
             from collections import defaultdict
@@ -8271,6 +8282,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     date_clause += f" AND tp.DATA >= '{date_from}'"
                 if date_to:
                     date_clause += f" AND tp.DATA <= '{date_to}'"
+                if cutoff_time:
+                    date_clause += (
+                        f" AND NOT (tp.DATA = '{date_to}'"
+                        f" AND tp.ORA >= {_hhmm_to_frames(cutoff_time)})"
+                    )
                 cur.execute(f"""
                     SELECT tpa.id_contrattirighe AS line_id,
                            tp.ID_TPALINSE        AS tp_id,
@@ -9743,64 +9759,95 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             for r in cur.fetchall()
                         }
 
-                        # One group per spot length. The sheet names ONE creative
-                        # language and every NYS creative is Mandarin, so every line of
-                        # that length inside the flight gets it (Lee's hand convention;
-                        # the card prints each line's catalog language so a Cantonese
-                        # line is visible, never silent).
-                        groups_out = []
-                        for dur in instr.durations:
-                            spots_out = []
-                            for sp in instr.spots_for(dur):
-                                found = sp.isci in filmati_map
-                                spots_out.append(
+                        # One group per FLIGHT per spot length (a revision sheet carries
+                        # several flights, each with its own rotation). The sheet names
+                        # ONE creative language and every NYS creative is Mandarin, so
+                        # every line of that length inside the flight gets it (Lee's hand
+                        # convention; the card prints each line's catalog language so a
+                        # Cantonese line is visible, never silent). A cutoff on the
+                        # flight's last day ("10PM Cutoff") leaves the later spots alone.
+                        periods_out = []
+                        for per in instr.periods:
+                            past_cutoff = (
+                                f"(tp.DATA = '{per.date_to_sql}'"
+                                f" AND tp.ORA >= {_hhmm_to_frames(per.cutoff)})"
+                                if per.cutoff
+                                else "(1 = 0)"
+                            )
+                            groups_out = []
+                            for dur in per.durations:
+                                spots_out = []
+                                for sp in per.spots_for(dur):
+                                    found = sp.isci in filmati_map
+                                    spots_out.append(
+                                        {
+                                            "isci": sp.isci,
+                                            "title": (
+                                                filmati_map[sp.isci]["db_title"] if found else ""
+                                            ),
+                                            "rotation_pct": sp.rotation_pct,
+                                            "note": sp.note,
+                                            "filmati_id": (
+                                                filmati_map[sp.isci]["filmati_id"]
+                                                if found
+                                                else None
+                                            ),
+                                            "found": found,
+                                        }
+                                    )
+                                found_ids = [s["filmati_id"] for s in spots_out if s["found"]]
+                                lines_out = []
+                                if contract_id:
+                                    fid_list = ",".join(str(f) for f in found_ids) or "-1"
+                                    cur.execute(f"""
+                                        SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                               cr.DESCRIZIONE       AS description,
+                                               ll.LANG              AS lang,
+                                               ISNULL(sc.spot_count, 0)     AS spot_count,
+                                               ISNULL(sc.assigned_count, 0) AS assigned_count,
+                                               ISNULL(sc.after_cutoff, 0)   AS after_cutoff
+                                        FROM CONTRATTIRIGHE cr
+                                        LEFT JOIN CTV_LineLanguage ll
+                                               ON ll.ID_CONTRATTIRIGHE = cr.ID_CONTRATTIRIGHE
+                                        LEFT JOIN (
+                                            SELECT tpa.id_contrattirighe,
+                                                   SUM(CASE WHEN {past_cutoff}
+                                                            THEN 0 ELSE 1 END) AS spot_count,
+                                                   SUM(CASE WHEN {past_cutoff} THEN 0
+                                                            WHEN tp.ID_FILMATI IN ({fid_list})
+                                                            THEN 1 ELSE 0 END) AS assigned_count,
+                                                   SUM(CASE WHEN {past_cutoff}
+                                                            THEN 1 ELSE 0 END) AS after_cutoff
+                                            FROM trafficPalinse tpa
+                                            JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                            WHERE tp.DATA >= '{per.date_from_sql}'
+                                              AND tp.DATA <= '{per.date_to_sql}'
+                                            GROUP BY tpa.id_contrattirighe
+                                        ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                                        WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                                          AND CAST(ROUND(CAST(cr.DURATA AS FLOAT)
+                                                         / {_FPS_GLOBAL}, 0) AS INT) = {dur}
+                                          AND ISNULL(sc.spot_count, 0) > 0
+                                        ORDER BY cr.ID_CONTRATTIRIGHE
+                                    """)
+                                    lines_out = [dict(r) for r in cur.fetchall()]
+                                groups_out.append(
                                     {
-                                        "isci": sp.isci,
-                                        "title": filmati_map[sp.isci]["db_title"] if found else "",
-                                        "rotation_pct": sp.rotation_pct,
-                                        "filmati_id": (
-                                            filmati_map[sp.isci]["filmati_id"] if found else None
-                                        ),
-                                        "found": found,
+                                        "duration_sec": dur,
+                                        "spots": spots_out,
+                                        "not_found": [
+                                            s["isci"] for s in spots_out if not s["found"]
+                                        ],
+                                        "lines": lines_out,
                                     }
                                 )
-                            found_ids = [s["filmati_id"] for s in spots_out if s["found"]]
-                            lines_out = []
-                            if contract_id:
-                                fid_list = ",".join(str(f) for f in found_ids) or "-1"
-                                cur.execute(f"""
-                                    SELECT cr.ID_CONTRATTIRIGHE AS line_id,
-                                           cr.DESCRIZIONE       AS description,
-                                           ll.LANG              AS lang,
-                                           ISNULL(sc.spot_count, 0)     AS spot_count,
-                                           ISNULL(sc.assigned_count, 0) AS assigned_count
-                                    FROM CONTRATTIRIGHE cr
-                                    LEFT JOIN CTV_LineLanguage ll
-                                           ON ll.ID_CONTRATTIRIGHE = cr.ID_CONTRATTIRIGHE
-                                    LEFT JOIN (
-                                        SELECT tpa.id_contrattirighe,
-                                               COUNT(*) AS spot_count,
-                                               SUM(CASE WHEN tp.ID_FILMATI IN ({fid_list})
-                                                        THEN 1 ELSE 0 END) AS assigned_count
-                                        FROM trafficPalinse tpa
-                                        JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
-                                        WHERE tp.DATA >= '{instr.date_from_sql}'
-                                          AND tp.DATA <= '{instr.date_to_sql}'
-                                        GROUP BY tpa.id_contrattirighe
-                                    ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
-                                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                                      AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
-                                          = {dur}
-                                      AND ISNULL(sc.spot_count, 0) > 0
-                                    ORDER BY cr.ID_CONTRATTIRIGHE
-                                """)
-                                lines_out = [dict(r) for r in cur.fetchall()]
-                            groups_out.append(
+                            periods_out.append(
                                 {
-                                    "duration_sec": dur,
-                                    "spots": spots_out,
-                                    "not_found": [s["isci"] for s in spots_out if not s["found"]],
-                                    "lines": lines_out,
+                                    "date_range": f"{per.start_date}–{per.end_date}",
+                                    "date_from_sql": per.date_from_sql,
+                                    "date_to_sql": per.date_to_sql,
+                                    "cutoff": per.cutoff,
+                                    "groups": groups_out,
                                 }
                             )
 
@@ -9817,7 +9864,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "date_to_sql": instr.date_to_sql,
                                 "contract": chosen,
                                 "contract_candidates": contracts,
-                                "groups": groups_out,
+                                "periods": periods_out,
                             }
                         )
 
@@ -11822,7 +11869,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from browser_automation.etere_direct_client import connect as _db_connect
 
             out = []
-            for cid in ids:  # one transaction per contract: a refusal on one leaves the others whole
+            for (
+                cid
+            ) in ids:  # one transaction per contract: a refusal on one leaves the others whole
                 conn = _db_connect()
                 try:
                     dates = _hiatus_dates_for(conn.cursor(), cid, text)

@@ -182,3 +182,129 @@ def test_pick_contract_refuses_two_opad_revisions():
     ]
     chosen, matches = pick_contract(cands, "3180", agency_id=OPAD_AGENCY_ID)
     assert chosen is None and len(matches) == 2
+
+
+# ── Revision sheet of 11/24/26: FROM and TO on one line, two flights, a cutoff ──
+
+REV_FIXTURE = _root / "tests" / "fixtures" / "opad_traffic" / "nysoh_est3180_mnd_rev_nov30.pdf"
+
+REV_SHEET = """\
+TRAFFIC INSTRUCTIONS
+To: Operations Desk / Traffic Departments
+From: Laurel Light llight@opadmedia.com
+RE: NYSDOH | NYSOH | Open Enrollment
+EST# 3180
+Date: November 24, 2026-REVISION ***MANDARIN***
+FROM: MONDAY, NOVEMBER 30, 2026 TO: MONDAY, DECEMBER 7, 2026
+:30s
+ISCI Code Length Rotation
+NYS36ENRDQMH :30 60% NEW SPOT IN ROTATION
+NYS36ENRGQMH :30 40%
+:15s
+ISCI Code Length Rotation
+NYS16ENRDQMH :15 60% NEW SPOT IN ROTATION
+NYS16ENRGQMH :15 40%
+FROM: TUESDAY, DECEMBER 8, 2026 TO: TUESDAY, DECEMBER 15, 2026 10PM Cutoff
+:30s
+ISCI Code Length Rotation
+NYS36ENRDQMH :30 100%
+:15s
+ISCI Code Length Rotation
+NYS16ENRDQMH :15 100%
+Please include ISCI codes on all invoices.
+"""
+
+
+def _flights(instr):
+    return [
+        (
+            p.date_from_sql,
+            p.date_to_sql,
+            p.cutoff,
+            [(s.isci, s.duration_sec, s.rotation_pct) for s in p.spots],
+        )
+        for p in instr.periods
+    ]
+
+
+def test_revision_fixture_has_two_flights_and_a_last_day_cutoff(real_pdfplumber):
+    import sys
+
+    from browser_automation.parsers import opad_traffic_parser as mod
+
+    mod.pdfplumber = real_pdfplumber
+    try:
+        instr = mod.parse_opad_traffic_pdf(REV_FIXTURE.read_bytes())
+    finally:
+        mod.pdfplumber = sys.modules["pdfplumber"]
+    assert instr.estimate == "3180" and instr.language_code == "M"
+    assert (instr.date_from_sql, instr.date_to_sql) == ("2026-11-30", "2026-12-15")
+    assert _flights(instr) == [
+        (
+            "2026-11-30",
+            "2026-12-07",
+            None,
+            [
+                ("NYS36ENRDQMH", 30, 60.0),
+                ("NYS36ENRGQMH", 30, 40.0),
+                ("NYS16ENRDQMH", 15, 60.0),
+                ("NYS16ENRGQMH", 15, 40.0),
+            ],
+        ),
+        (
+            "2026-12-08",
+            "2026-12-15",
+            "22:00",
+            [("NYS36ENRDQMH", 30, 100.0), ("NYS16ENRDQMH", 15, 100.0)],
+        ),
+    ]
+    assert instr.periods[0].spots[0].note == "NEW SPOT IN ROTATION"
+    # The pinned text below parses to the same flights as the real sheet.
+    assert _flights(parse_opad_traffic_text(REV_SHEET)) == _flights(instr)
+
+
+def test_single_flight_sheet_is_one_period():
+    instr = parse_opad_traffic_text(SHEET)
+    assert _flights(instr) == [
+        (
+            "2026-11-09",
+            "2026-11-29",
+            None,
+            [("NYS36ENRGQMH", 30, 100.0), ("NYS16ENRGQMH", 15, 100.0)],
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    [
+        # an unknown remark after the TO: date is never dropped silently
+        ("10PM Cutoff", "EXCEPT WEEKENDS"),
+        # the second flight starts inside the first
+        ("FROM: TUESDAY, DECEMBER 8, 2026", "FROM: MONDAY, DECEMBER 7, 2026"),
+        # one flight's table no longer adds to 100%
+        ("NYS36ENRGQMH :30 40%", "NYS36ENRGQMH :30 30%"),
+        # a flight with dates and no rows
+        (
+            "Please include ISCI codes",
+            "FROM: MONDAY, JANUARY 4, 2027 TO: SUNDAY, JANUARY 10, 2027\nPlease include ISCI codes",
+        ),
+        # a flight with no end
+        (" TO: MONDAY, DECEMBER 7, 2026", ""),
+    ],
+)
+def test_tampered_revision_sheet_refuses(old, new):
+    text = REV_SHEET.replace(old, new)
+    assert text != REV_SHEET
+    with pytest.raises(ValueError):
+        parse_opad_traffic_text(text)
+
+
+def test_cutoff_spellings():
+    for spelled, want in [
+        ("10PM Cutoff", "22:00"),
+        ("10:30 PM cut-off", "22:30"),
+        ("12AM Cutoff", "00:00"),
+    ]:
+        instr = parse_opad_traffic_text(REV_SHEET.replace("10PM Cutoff", spelled))
+        assert instr.periods[-1].cutoff == want

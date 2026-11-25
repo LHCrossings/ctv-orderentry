@@ -1,16 +1,22 @@
 """
 Parse opAD Media "TRAFFIC INSTRUCTIONS" PDFs (NYS Dept of Health / NYSOH).
 
-One page per sheet: an ``EST#`` line, a ``***LANGUAGE***`` banner, a ``FROM:`` /
-``TO:`` flight, then one table per spot length (``:30s`` / ``:15s`` headed
-``ISCI Code Length Rotation``). opAD ships ONE creative language per sheet and
-every NYS creative ever ingested is Mandarin (``…MH``), so the sheet's language
-names the creative, not a subset of the contract's lines: every line of that
-length inside the flight gets the creative (what Lee does by hand).
+One page per sheet: an ``EST#`` line, a ``***LANGUAGE***`` banner, then one or
+more FLIGHTS. A flight is a ``FROM:`` / ``TO:`` pair (two lines, or one line since
+the 11/24/26 revision) followed by one table per spot length (``:30s`` / ``:15s``
+headed ``ISCI Code Length Rotation``). A revision sheet carries several flights,
+each with its own rotation, and the last ``TO:`` can carry a clock cutoff
+(``10PM Cutoff``): the creative stops at that time on the flight's last day.
+opAD ships ONE creative language per sheet and every NYS creative ever ingested
+is Mandarin (``…MH``), so the sheet's language names the creative, not a subset
+of the contract's lines: every line of that length inside the flight gets the
+creative (what Lee does by hand).
 
-The sheet is its own oracle: each length's rotations must add to 100%, the
-flight must have both dates, and a sheet with no ISCI rows REFUSES (a parser
-that matches nothing is indistinguishable from an empty document).
+The sheet is its own oracle: within each flight each length's rotations must add
+to 100%, every flight must have both dates, flights must not overlap, text after
+a ``TO:`` date that is not a cutoff REFUSES, and a sheet with no ISCI rows
+REFUSES (a parser that matches nothing is indistinguishable from an empty
+document).
 """
 
 import io
@@ -57,9 +63,12 @@ _DATE_RE = re.compile(
     r"(?:[A-Z]+,\s*)?([A-Z]+)\s+(\d{1,2}),?\s*(\d{4})",
     re.IGNORECASE,
 )
-# "NYS36ENRGQMH :30 100%" — an ISCI is one token of letters/digits (8+ chars).
-_ROW_RE = re.compile(r"^([A-Z0-9]{8,})\s+:(\d{1,3})\s+([\d.]+)\s*%\s*$")
+# "NYS36ENRGQMH :30 100%" — an ISCI is one token of letters/digits (8+ chars). A
+# revision row can carry a remark after the percentage ("NEW SPOT IN ROTATION").
+_ROW_RE = re.compile(r"^([A-Z0-9]{8,})\s+:(\d{1,3})\s+([\d.]+)\s*%\s*(.*)$")
 _LENGTH_HEADER_RE = re.compile(r"^:(\d{1,3})s\b", re.IGNORECASE)
+# "10PM Cutoff" / "10:00 PM cut-off" after the TO: date.
+_CUTOFF_RE = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?\s*CUT-?\s*OFF\.?", re.IGNORECASE)
 
 
 @dataclass
@@ -67,6 +76,30 @@ class OpadTrafficSpot:
     isci: str
     duration_sec: int
     rotation_pct: float
+    note: str = ""  # remark printed after the percentage
+
+
+@dataclass
+class OpadTrafficPeriod:
+    """One flight of the sheet: its own dates, optional last-day cutoff, own rotation."""
+
+    start_date: str  # display, "11/30/26"
+    date_from_sql: str
+    end_date: str = ""
+    date_to_sql: str = ""
+    cutoff: Optional[str] = None  # "22:00" = stop at 10 PM on the last day
+    spots: List[OpadTrafficSpot] = field(default_factory=list)
+
+    @property
+    def durations(self) -> List[int]:
+        seen: List[int] = []
+        for s in self.spots:
+            if s.duration_sec not in seen:
+                seen.append(s.duration_sec)
+        return seen
+
+    def spots_for(self, duration_sec: int) -> List[OpadTrafficSpot]:
+        return [s for s in self.spots if s.duration_sec == duration_sec]
 
 
 @dataclass
@@ -75,11 +108,16 @@ class OpadTrafficInstruction:
     advertiser: str  # the RE: line, e.g. "NYSDOH | NYSOH | Open Enrollment"
     language: str  # banner text, e.g. "MANDARIN"
     language_code: str  # CTV_LineLanguage code, e.g. "M"
-    start_date: str  # display, "11/9/26"
-    end_date: str
+    start_date: str  # display, first flight's start
+    end_date: str  # display, last flight's end
     date_from_sql: Optional[str] = None
     date_to_sql: Optional[str] = None
-    spots: List[OpadTrafficSpot] = field(default_factory=list)
+    periods: List[OpadTrafficPeriod] = field(default_factory=list)
+
+    @property
+    def spots(self) -> List[OpadTrafficSpot]:
+        """Every flight's rows in sheet order (one flight = that flight's rows)."""
+        return [s for p in self.periods for s in p.spots]
 
     @property
     def durations(self) -> List[int]:
@@ -101,28 +139,40 @@ def is_opad_traffic_text(text: str) -> bool:
     return "OPADMEDIA.COM" in upper or "OPAD MEDIA" in upper
 
 
-def _parse_date(label: str, text: str) -> tuple:
-    """Return (display 'M/D/YY', sql 'YYYY-MM-DD') for the ``label:`` line."""
-    # The memo header has its own "From: <sender>" line; the flight line is the
-    # FROM:/TO: whose value is a date, so walk every one and keep the first that is.
-    values = re.findall(rf"^{label}:\s*(.+)$", text, re.IGNORECASE | re.MULTILINE)
-    if not values:
-        raise ValueError(f"opAD traffic sheet: no {label}: date line")
-    dm = None
-    for v in values:
-        dm = _DATE_RE.search(v)
-        if dm and dm.group(1).upper() in _MONTHS:
-            break
-        dm = None
-    if not dm:
-        raise ValueError(
-            f"opAD traffic sheet: cannot read {label}: date from "
-            + " / ".join(v.strip() for v in values)
-        )
+def _read_date(value: str):
+    """Return (display 'M/D/YY', sql 'YYYY-MM-DD', text after the date) or None."""
+    dm = _DATE_RE.search(value)
+    if not dm or dm.group(1).upper() not in _MONTHS:
+        return None
     month = _MONTHS[dm.group(1).upper()]
     day, year = int(dm.group(2)), int(dm.group(3))
-    display = f"{month}/{day}/{year % 100:02d}"
-    return display, f"{year:04d}-{month:02d}-{day:02d}"
+    return (
+        f"{month}/{day}/{year % 100:02d}",
+        f"{year:04d}-{month:02d}-{day:02d}",
+        value[dm.end() :].strip(),
+    )
+
+
+def _close_period(period: OpadTrafficPeriod, value: str) -> None:
+    """Set the flight's end from the text after ``TO:`` (date + optional cutoff)."""
+    got = _read_date(value)
+    if not got:
+        raise ValueError(f"opAD traffic sheet: cannot read TO: date from {value.strip()!r}")
+    period.end_date, period.date_to_sql, rest = got
+    # The sheet draws an arrow glyph (a private-use character) in front of the remark.
+    rest = re.sub(r"^\W+", "", rest)
+    if rest:
+        cm = _CUTOFF_RE.fullmatch(rest)
+        if not cm:
+            raise ValueError(
+                f"opAD traffic sheet: cannot read {rest!r} after the TO: date {period.end_date}"
+            )
+        hour = int(cm.group(1)) % 12 + (12 if cm.group(3).upper() == "P" else 0)
+        period.cutoff = f"{hour:02d}:{int(cm.group(2) or 0):02d}"
+    if period.date_to_sql < period.date_from_sql:
+        raise ValueError(
+            f"opAD traffic sheet: TO {period.end_date} is before FROM {period.start_date}"
+        )
 
 
 def parse_opad_traffic_text(text: str) -> OpadTrafficInstruction:
@@ -139,16 +189,42 @@ def parse_opad_traffic_text(text: str) -> OpadTrafficInstruction:
     language = lang_m.group(1).strip().upper() if lang_m else ""
     language_code = _LANGUAGE_CODES.get(language, "")
 
-    start_disp, start_sql = _parse_date("FROM", text)
-    end_disp, end_sql = _parse_date("TO", text)
-    if end_sql < start_sql:
-        raise ValueError(f"opAD traffic sheet: TO {end_disp} is before FROM {start_disp}")
-
-    spots: List[OpadTrafficSpot] = []
+    periods: List[OpadTrafficPeriod] = []
+    current: Optional[OpadTrafficPeriod] = None
     current_len: Optional[int] = None
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
+            continue
+        # The memo header has its own "To: <desk>" / "From: <sender>" lines; a flight
+        # line is the FROM:/TO: whose value is a date.
+        fm = re.match(r"^FROM:\s*(.+)$", line, re.IGNORECASE)
+        if fm:
+            parts = re.split(r"\bTO:\s*", fm.group(1), maxsplit=1, flags=re.IGNORECASE)
+            got = _read_date(parts[0])
+            if not got:
+                continue
+            if current is not None and not current.date_to_sql:
+                raise ValueError(
+                    f"opAD traffic sheet: the flight from {current.start_date} has no TO: date"
+                )
+            if got[2]:
+                raise ValueError(
+                    f"opAD traffic sheet: cannot read {got[2]!r} after the FROM: date {got[0]}"
+                )
+            current = OpadTrafficPeriod(start_date=got[0], date_from_sql=got[1])
+            current_len = None
+            periods.append(current)
+            if len(parts) == 2:
+                _close_period(current, parts[1])
+            continue
+        tm = re.match(r"^TO:\s*(.+)$", line, re.IGNORECASE)
+        if tm:
+            if not _read_date(tm.group(1)):
+                continue
+            if current is None or current.date_to_sql:
+                raise ValueError("opAD traffic sheet: a TO: date with no FROM: date before it")
+            _close_period(current, tm.group(1))
             continue
         hm = _LENGTH_HEADER_RE.match(line)
         if hm:
@@ -157,38 +233,61 @@ def parse_opad_traffic_text(text: str) -> OpadTrafficInstruction:
         rm = _ROW_RE.match(line)
         if not rm:
             continue
+        if current is None:
+            raise ValueError(f"opAD traffic sheet: {rm.group(1)} is listed before any FROM: flight")
         row_len = int(rm.group(2))
         if current_len is not None and row_len != current_len:
             raise ValueError(
                 f"opAD traffic sheet: {rm.group(1)} is :{row_len} under the :{current_len}s table"
             )
-        spots.append(OpadTrafficSpot(rm.group(1), row_len, float(rm.group(3))))
+        current.spots.append(
+            OpadTrafficSpot(
+                rm.group(1), row_len, float(rm.group(3)), re.sub(r"^\W+", "", rm.group(4)).strip()
+            )
+        )
 
-    if not spots:
+    if not periods:
+        raise ValueError("opAD traffic sheet: no FROM: date line")
+    if not any(p.spots for p in periods):
         raise ValueError(
             "opAD traffic sheet: no ISCI rows found — the layout may have changed; nothing to assign"
         )
-    by_len: dict = {}
-    for s in spots:
-        by_len.setdefault(s.duration_sec, []).append(s)
-    for dur, grp in by_len.items():
-        total = sum(s.rotation_pct for s in grp)
-        if abs(total - 100.0) > 0.5:
-            raise ValueError(f"opAD traffic sheet: :{dur} rotations add to {total:g}%, not 100%")
-        iscis = [s.isci for s in grp]
-        if len(set(iscis)) != len(iscis):
-            raise ValueError(f"opAD traffic sheet: duplicate ISCI in the :{dur}s table")
+    prev: Optional[OpadTrafficPeriod] = None
+    for p in periods:
+        label = f"{p.start_date}–{p.end_date}"
+        if not p.date_to_sql:
+            raise ValueError(f"opAD traffic sheet: the flight from {p.start_date} has no TO: date")
+        if not p.spots:
+            raise ValueError(f"opAD traffic sheet: the flight {label} has no ISCI rows")
+        if prev is not None and p.date_from_sql <= prev.date_to_sql:
+            raise ValueError(
+                f"opAD traffic sheet: the flight {label} starts on or before the end of "
+                f"{prev.start_date}–{prev.end_date}"
+            )
+        for dur in p.durations:
+            grp = p.spots_for(dur)
+            total = sum(s.rotation_pct for s in grp)
+            if abs(total - 100.0) > 0.5:
+                raise ValueError(
+                    f"opAD traffic sheet: :{dur} rotations in {label} add to {total:g}%, not 100%"
+                )
+            iscis = [s.isci for s in grp]
+            if len(set(iscis)) != len(iscis):
+                raise ValueError(
+                    f"opAD traffic sheet: duplicate ISCI in the :{dur}s table of {label}"
+                )
+        prev = p
 
     return OpadTrafficInstruction(
         estimate=estimate,
         advertiser=advertiser,
         language=language,
         language_code=language_code,
-        start_date=start_disp,
-        end_date=end_disp,
-        date_from_sql=start_sql,
-        date_to_sql=end_sql,
-        spots=spots,
+        start_date=periods[0].start_date,
+        end_date=periods[-1].end_date,
+        date_from_sql=periods[0].date_from_sql,
+        date_to_sql=periods[-1].date_to_sql,
+        periods=periods,
     )
 
 
