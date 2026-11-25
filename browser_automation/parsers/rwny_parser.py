@@ -84,6 +84,15 @@ class RWNYOrder:
     lines: list = field(default_factory=list)  # list[RWNYLine]
     pdf_path: str = ""
     rates_are_net: bool = False
+    # Non-airtime money on the sheet (the "Translations" row), at the Proposed
+    # budget column. It enters in the first paid line's Production box, never as
+    # a line (Lee 2026-11-25; contract 3204 went in without its $500).
+    production: float = 0.0
+    contract_total: Optional[float] = None  # the sheet's "Contract" figure
+
+    @property
+    def airtime_total(self) -> float:
+        return round(sum(ln.rate * ln.total_spots for ln in self.lines if not ln.is_bonus), 2)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +121,72 @@ _SKIP_FIRST_WORDS = {
     'contract', 'production', 'thank', 'discounted', 'voiceover',
     'filipino and', 'none',
 }
+
+
+_MONEY_RE = re.compile(r"\$?\s*([\d][\d ,]*(?:\.\d+)?)")
+
+
+def _money_cell(v) -> Optional[float]:
+    """A money cell as a number: 500, '$ 5 00.00', '$ 2 ,400.00'. None when it holds none."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = _MONEY_RE.search(str(v))
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(" ", "").replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _budget_col(hdr: list) -> int:
+    """Index of the 'Proposed budget' column, -1 when the header has none."""
+    for j, h in enumerate(hdr):
+        if "budget" in str(h or "").lower():
+            return j
+    return -1
+
+
+def _production_from_row(row: list, budget_col: int, shift: int = 0) -> float:
+    """The discounted amount of a 'Translations' row = its Proposed budget cell."""
+    j = budget_col + shift
+    amount = _money_cell(row[j]) if 0 <= j < len(row) else None
+    if amount is None:
+        raise ValueError(
+            "RWNY proposal: the Translations row has no amount in the Proposed budget column."
+        )
+    return amount
+
+
+def _contract_total(rows: list) -> Optional[float]:
+    """The sheet's 'Contract $ 6,000.00' figure (one cell in the PDF, two in the xlsx)."""
+    for row in rows:
+        for j, v in enumerate(row or []):
+            if not isinstance(v, str) or not v.strip().lower().startswith("contract"):
+                continue
+            rest = v.strip()[len("contract"):]
+            amount = _money_cell(rest) if rest.strip() else None
+            if amount is None and j + 1 < len(row):
+                amount = _money_cell(row[j + 1])
+            if amount is not None:
+                return amount
+    return None
+
+
+def _reconcile(order: "RWNYOrder") -> "RWNYOrder":
+    """Airtime + production must equal the sheet's own Contract figure."""
+    if order.contract_total is None:
+        return order
+    got = round(order.airtime_total + order.production, 2)
+    if abs(got - order.contract_total) > 0.01:
+        raise ValueError(
+            f"RWNY proposal does not foot: airtime ${order.airtime_total:,.2f} + production "
+            f"${order.production:,.2f} = ${got:,.2f}, but the sheet's Contract total is "
+            f"${order.contract_total:,.2f}."
+        )
+    return order
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -349,6 +424,8 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
 
     # ── Parse data rows ───────────────────────────────────────────────────────
     lines: list[RWNYLine] = []
+    production = 0.0
+    budget_col = _budget_col(hdr)
 
     for row in sched[hdr_idx + 1:]:
         if not row:
@@ -358,6 +435,10 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
         col1 = str(row[daypart_col] or '').strip() if len(row) > daypart_col and row[daypart_col] else ''
 
         if not col0:
+            continue
+
+        if col0.lower().startswith('translation'):
+            production += _production_from_row(row, budget_col)
             continue
 
         # Skip summary/footer rows
@@ -402,7 +483,7 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
             total_spots=total_spots,
         ))
 
-    return RWNYOrder(
+    return _reconcile(RWNYOrder(
         client=client,
         contact=contact,
         email=email,
@@ -413,7 +494,9 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
         month_columns=month_columns,
         lines=lines,
         pdf_path=pdf_path,
-    )
+        production=round(production, 2),
+        contract_total=_contract_total(sched[hdr_idx + 1:]),
+    ))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -499,6 +582,8 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
 
     # ── Parse data rows ───────────────────────────────────────────────────────
     lines: list[RWNYLine] = []
+    production = 0.0
+    budget_col = _budget_col(hdr_row)
 
     for row in all_rows[hdr_row_idx + 1:]:
         if not any(v is not None for v in row):
@@ -542,9 +627,13 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
             block_name  = language
             daypart_raw = 'ROS'
         else:
+            if col0.lower().startswith('translation'):
+                production += _production_from_row(row, budget_col)
+                continue
+
             # Skip summary/footer rows
             first_word = col0.lower().split()[0] if col0.split() else ''
-            if first_word in _SKIP_FIRST_WORDS or col0.lower().startswith('translation'):
+            if first_word in _SKIP_FIRST_WORDS:
                 continue
 
             language   = _detect_language(col0)
@@ -578,7 +667,7 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
             total_spots=total_spots,
         ))
 
-    return RWNYOrder(
+    return _reconcile(RWNYOrder(
         client=client,
         contact=contact,
         email=email,
@@ -589,7 +678,9 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
         month_columns=month_columns,
         lines=lines,
         pdf_path=path,
-    )
+        production=round(production, 2),
+        contract_total=_contract_total(all_rows[hdr_row_idx + 1:]),
+    ))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

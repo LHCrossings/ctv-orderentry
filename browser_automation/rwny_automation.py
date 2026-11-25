@@ -229,6 +229,9 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
 
         duration_str = _secs_to_duration(order.duration_seconds)
         line_count = 0
+        # Production (the Translations row) rides in the FIRST PAID line's
+        # Production box -> CONTRATTISPESE 'Production', never a line of its own.
+        production_pending = round(float(getattr(order, 'production', 0.0) or 0.0), 2)
 
         # A late entry (confirmed/overridden start date) must reach the LINE
         # dates, not just the header: clamp each month column to the actual
@@ -272,7 +275,10 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
                       f"{line.language} — {month.label}  {spots} spots  "
                       f"{m_from:%m/%d}–{m_to:%m/%d}  max/day {max_daily}")
 
-                client.add_contract_line(
+                prod = production_pending if not is_bonus else 0.0
+                production_pending = round(production_pending - prod, 2)
+
+                line_id = client.add_contract_line(
                     market=RWNY_MARKET,
                     days=adjusted_days,
                     time_range=time_range,
@@ -287,7 +293,18 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
                     is_bonus=is_bonus,
                     booking_code=booking_code,
                     separation_intervals=separation,
+                    production_cost=prod,
                 )
+                if prod:
+                    from browser_automation.line_planner import verify_production_charge
+                    verify_production_charge(conn.cursor(), line_id, prod, label="RWNY")
+                    print(f"           ↳ Production ${prod:,.2f} (→ CONTRATTISPESE 'Production')")
+
+        if production_pending:
+            raise RuntimeError(
+                f"RWNY: ${production_pending:,.2f} production was never attached to a paid "
+                f"line — rolling back rather than entering the order without it."
+            )
 
         conn.commit()
         conn.close()
@@ -347,6 +364,10 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
     print(f'  Flight:   {order.flight_start} – {order.flight_end}')
     print(f'  Months:   {[c.label for c in order.month_columns]}')
     print(f'  Lines:    {len(paid_lines)} paid + {len(bonus_lines)} bonus  ({total_spots} total spots, ${total_cost:,.2f})')
+    if order.production:
+        print(f'  Production: ${order.production:,.2f}  (first paid line\'s Production box)')
+    if order.contract_total is not None:
+        print(f'  Contract:   ${order.contract_total:,.2f}  (airtime + production, as on the sheet)')
     print()
 
     # ── Flight start date confirmation ─────────────────────────────────────
