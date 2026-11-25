@@ -313,6 +313,11 @@
             <div class="picker-name">WorldLink Order</div>
             <div class="picker-desc">WorldLink Entertainment order backwrite using the WorldLink IO PDF.</div>
         </div>
+        <div class="picker-card" onclick="setMode('production')">
+            <div class="picker-icon">🎬</div>
+            <div class="picker-name">Production</div>
+            <div class="picker-desc">Production charges for a contract: one PRD billing line per charge, dated the 20th.</div>
+        </div>
     </div>
 
     <!-- Breadcrumb shown after mode is chosen -->
@@ -667,6 +672,64 @@
     </div>
 
 </div><!-- /wl-section -->
+
+<!-- Production section -->
+<div id="prod-section" style="display:none">
+
+    <div class="bw-card">
+        <h2>Step 1 — Pick the Contract</h2>
+        <div class="db-fetch-row">
+            <div class="form-group">
+                <label for="prod-contract-search">Contract</label>
+                <div class="db-search-wrap">
+                    <input type="text" id="prod-contract-search" placeholder="Search by code or name, or type the contract number…" autocomplete="off" />
+                    <div id="prod-contract-dropdown" class="db-contract-dropdown"></div>
+                </div>
+            </div>
+            <button type="button" class="btn-generate" id="prod-load-btn" style="margin-top:0">&#8595; Load</button>
+        </div>
+        <div class="status-msg" id="prod-load-status"></div>
+    </div>
+
+    <div class="bw-card" id="prod-form-card" style="display:none">
+        <h2>Step 2 — Production Charges</h2>
+        <div class="preview-box"><div class="preview-grid" id="prod-facts"></div></div>
+
+        <div class="section-label">Charges</div>
+        <p id="prod-charges-note" style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 10px"></p>
+        <div id="prod-charges"></div>
+        <button type="button" class="btn-reset" id="prod-add-charge" style="margin:4px 0 0">+ Add a charge</button>
+
+        <div id="prod-gross-block" style="display:none">
+            <div class="section-label">Agency Commission</div>
+            <div class="form-group">
+                <label for="prod-gross">The production amount on the IO is</label>
+                <select id="prod-gross">
+                    <option value="">— choose —</option>
+                    <option value="gross">Gross: commission comes off it</option>
+                    <option value="net">Net: no commission</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="section-label">Contact Information</div>
+        <div class="form-grid">
+            <div class="form-group"><label for="prod-contact_person">Contact Person</label><input type="text" id="prod-contact_person" /></div>
+            <div class="form-group"><label for="prod-phone">Phone</label><input type="text" id="prod-phone" /></div>
+            <div class="form-group"><label for="prod-email_1">Email</label><input type="text" id="prod-email_1" /></div>
+            <div class="form-group"><label for="prod-address">Address</label><input type="text" id="prod-address" /></div>
+            <div class="form-group"><label for="prod-city">City</label><input type="text" id="prod-city" /></div>
+            <div class="form-grid">
+                <div class="form-group"><label for="prod-state">State</label><input type="text" id="prod-state" /></div>
+                <div class="form-group"><label for="prod-zip">Zip</label><input type="text" id="prod-zip" /></div>
+            </div>
+        </div>
+
+        <button type="button" class="btn-generate" id="prod-generate-btn">&#8595; Generate Excel</button>
+        <div class="status-msg" id="prod-form-status"></div>
+    </div>
+
+</div><!-- /prod-section -->
 
 <!-- Etere Report Puller (standard mode only) -->
 <div class="bw-card" id="report-puller-card" style="margin-top:24px;display:none">
@@ -1333,6 +1396,7 @@ function setMode(mode) {
     document.getElementById('mode-worldlink').classList.toggle('active', mode === 'worldlink');
     document.getElementById('standard-section').style.display    = mode === 'standard' ? '' : 'none';
     document.getElementById('wl-section').style.display          = mode === 'worldlink' ? '' : 'none';
+    document.getElementById('prod-section').style.display        = mode === 'production' ? '' : 'none';
     document.getElementById('report-puller-card').style.display  = mode === 'standard' ? '' : 'none';
 
     // Hide picker, show breadcrumb
@@ -1340,7 +1404,7 @@ function setMode(mode) {
     const bc = document.getElementById('mode-breadcrumb');
     bc.classList.add('visible');
     document.getElementById('breadcrumb-label').textContent =
-        mode === 'worldlink' ? 'WorldLink Order' : 'Standard Order';
+        mode === 'worldlink' ? 'WorldLink Order' : mode === 'production' ? 'Production' : 'Standard Order';
 }
 
 function resetMode() {
@@ -1348,8 +1412,183 @@ function resetMode() {
     document.getElementById('mode-breadcrumb').classList.remove('visible');
     document.getElementById('standard-section').style.display   = 'none';
     document.getElementById('wl-section').style.display         = 'none';
+    document.getElementById('prod-section').style.display       = 'none';
     document.getElementById('report-puller-card').style.display = 'none';
 }
+
+// ── Production mode ───────────────────────────────────────────────────────────
+// One PRD billing line per production charge. Charges come from Etere when the
+// contract has them; a contract entered without its production takes typed rows.
+
+(function () {
+    const MARKETS = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL'];
+    const CONTACT = ['contact_person','phone','email_1','address','city','state','zip'];
+    const $ = id => document.getElementById(id);
+    const inp = $('prod-contract-search'), drop = $('prod-contract-dropdown');
+    const loadStatus = $('prod-load-status'), formStatus = $('prod-form-status');
+    let contract = null, selectedId = null, timer = null;
+
+    const text = v => { const d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; };
+    const usDate = iso => { const [y, m, d] = iso.split('-'); return `${m}/${d}/${y}`; };
+
+    inp.addEventListener('input', () => { selectedId = null; clearTimeout(timer); timer = setTimeout(search, 300); });
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { clearTimeout(timer); drop.classList.remove('open'); load(); }
+        if (e.key === 'Escape') drop.classList.remove('open');
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#prod-contract-search') && !e.target.closest('#prod-contract-dropdown'))
+            drop.classList.remove('open');
+    });
+    $('prod-load-btn').addEventListener('click', load);
+
+    async function search() {
+        const q = inp.value.trim();
+        if (!q) { drop.classList.remove('open'); return; }
+        try {
+            const results = await (await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`)).json();
+            drop.innerHTML = '';
+            if (!results.length) {
+                drop.innerHTML = '<div class="dc-item">No contracts found</div>';
+            }
+            results.forEach(r => {
+                const el = document.createElement('div');
+                el.className = 'dc-item';
+                el.innerHTML = `<div class="dc-code">${text(r.code || r.id)}</div>` +
+                    `<div class="dc-desc">${text(r.description)} &nbsp;·&nbsp; ${text(r.date_start)} – ${text(r.date_end)}</div>`;
+                el.addEventListener('click', () => {
+                    selectedId = r.id; inp.value = r.code || r.id; drop.classList.remove('open'); load();
+                });
+                drop.appendChild(el);
+            });
+            drop.classList.add('open');
+        } catch {}
+    }
+
+    function chargeRow(c) {
+        const row = document.createElement('div');
+        row.className = 'form-grid-3 prod-charge';
+        row.style.marginBottom = '10px';
+        const opts = ['<option value="">— market —</option>']
+            .concat(MARKETS.map(m => `<option${m === c.market ? ' selected' : ''}>${m}</option>`)).join('');
+        row.innerHTML =
+            `<div class="form-group"><label>Description</label><input type="text" class="pc-desc" /></div>` +
+            `<div class="form-group"><label>Bill date</label><input type="text" class="pc-date" onblur="formatDateInput(this)" /></div>` +
+            `<div class="form-group"><label>Amount</label><input type="text" class="pc-amount" /></div>` +
+            `<div class="form-group"><label>Market</label><select class="pc-market">${opts}</select></div>` +
+            `<div class="form-group"><label>&nbsp;</label><button type="button" class="btn-reset pc-remove" style="margin-left:0">Remove</button></div>`;
+        row.querySelector('.pc-desc').value = c.description || '';
+        row.querySelector('.pc-date').value = usDate(c.bill_date);
+        row.querySelector('.pc-amount').value = c.amount ? Number(c.amount).toFixed(2) : '';
+        row.querySelector('.pc-remove').addEventListener('click', () => row.remove());
+        return row;
+    }
+
+    function blankCharge() {
+        // One market: that market. Several: the first one Etere lists (Lee 11/25).
+        return { description: '', bill_date: contract.default_bill_date, amount: '', market: contract.markets[0] || '' };
+    }
+
+    $('prod-add-charge').addEventListener('click', () => $('prod-charges').appendChild(chargeRow(blankCharge())));
+
+    async function load() {
+        const ref = selectedId || inp.value.trim();
+        if (!ref) return;
+        showStatus(loadStatus, 'Reading the contract…', 'info');
+        $('prod-form-card').style.display = 'none';
+        try {
+            const resp = await fetch('/backwrite/production/lookup?contract=' + encodeURIComponent(ref));
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Lookup failed');
+            contract = data;
+        } catch (e) { showStatus(loadStatus, e.message, 'error'); return; }
+        loadStatus.className = 'status-msg';
+
+        const facts = [
+            ['Contract', `${contract.code} (ID ${contract.contract_id})`],
+            ['Client', contract.client],
+            ['Agency', contract.agency || '—'],
+            ['Agency?', contract.agency_flag],
+            ['Billing Type', contract.billing_type],
+            ['Sales Person', contract.sales_person],
+            ['Estimate', contract.estimate],
+            ['Revenue Type', contract.revenue_type],
+        ];
+        $('prod-facts').innerHTML = facts.map(([k, v]) =>
+            `<div class="prow"><span class="plabel">${text(k)}</span><span class="pval">${text(v)}</span></div>`).join('');
+
+        const box = $('prod-charges');
+        box.innerHTML = '';
+        if (contract.charges.length) {
+            $('prod-charges-note').textContent =
+                `Etere holds ${contract.charges.length} production charge(s) on this contract. ` +
+                'Each bill date is the 20th of the charge month; change it to the month the charge bills.';
+            contract.charges.forEach(c => box.appendChild(chargeRow(c)));
+        } else {
+            $('prod-charges-note').textContent =
+                'Etere holds no production charge on this contract. Type the charge from the IO.';
+            box.appendChild(chargeRow(blankCharge()));
+        }
+        const agencyFee = contract.agency_flag === 'Agency' && contract.agency_fee > 0;
+        $('prod-gross-block').style.display = agencyFee ? '' : 'none';
+        $('prod-gross').value = '';
+        CONTACT.forEach(k => { $('prod-' + k).value = (contract.contact || {})[k] || ''; });
+        formStatus.className = 'status-msg';
+        $('prod-form-card').style.display = '';
+    }
+
+    $('prod-generate-btn').addEventListener('click', async () => {
+        if (!contract) return;
+        const charges = [];
+        for (const row of document.querySelectorAll('#prod-charges .prod-charge')) {
+            const iso = parseDateInput(row.querySelector('.pc-date').value);
+            if (!iso) { showStatus(formStatus, 'A bill date cannot be read.', 'error'); return; }
+            charges.push({
+                description: row.querySelector('.pc-desc').value.trim(),
+                bill_date: iso,
+                amount: row.querySelector('.pc-amount').value.trim(),
+                market: row.querySelector('.pc-market').value,
+            });
+        }
+        const payload = { contract_id: contract.contract_id, charges, contact: {} };
+        CONTACT.forEach(k => { payload.contact[k] = $('prod-' + k).value.trim(); });
+        if ($('prod-gross-block').style.display !== 'none') {
+            const g = $('prod-gross').value;
+            if (!g) { showStatus(formStatus, 'Choose whether the production amount is gross or net.', 'error'); return; }
+            payload.amounts_are_gross = g === 'gross';
+        }
+        const btn = $('prod-generate-btn');
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/backwrite/production/generate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+                let msg = await resp.text();
+                try { msg = JSON.parse(msg).detail || msg; } catch (_e) {}
+                throw new Error(msg);
+            }
+            const blob = await resp.blob();
+            const match = (resp.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+            const fname = match ? match[1] : 'production.xlsx';
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url; link.download = fname; link.click();
+            URL.revokeObjectURL(url);
+            let recon = null;
+            try { recon = JSON.parse(resp.headers.get('X-Backwrite-Reconcile') || 'null'); } catch (_e) {}
+            formStatus.style.whiteSpace = 'pre-line';
+            if (recon && recon.ok === false) {
+                showStatus(formStatus, `Downloaded ${fname}, but the totals do NOT reconcile:\n` + (recon.messages || []).join('\n'), 'error');
+            } else {
+                const g = (recon && recon.gross) || {}, n = (recon && recon.net) || {};
+                showStatus(formStatus, `Downloaded ${fname}. Gross $${(g.run_sheet || 0).toFixed(2)}, net $${(n.run_sheet || 0).toFixed(2)}.`, 'info');
+            }
+        } catch (e) {
+            showStatus(formStatus, e.message, 'error');
+        } finally { btn.disabled = false; }
+    });
+})();
 
 // Drag-and-drop for WL upload zone
 (function () {

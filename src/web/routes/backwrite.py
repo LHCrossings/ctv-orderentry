@@ -2,6 +2,7 @@
 Backwrite routes: placement CSV → three-tab Excel download.
 """
 
+import asyncio
 import io
 import json
 import os
@@ -11,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -318,6 +319,72 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         from backwrite.eterebridge_runner import get_etere_billing_type
 
         return JSONResponse(get_etere_billing_type(contract))
+
+    @router.get("/production/lookup")
+    async def backwrite_production_lookup(contract: str = ""):
+        """Contract facts + the production charges Etere holds, for the Production mode."""
+        from backwrite.production import load_contract
+
+        def _run():
+            return load_contract(contract)
+
+        try:
+            return JSONResponse(await asyncio.get_event_loop().run_in_executor(None, _run))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @router.post("/production/generate")
+    async def backwrite_production_generate(body: dict = Body(default={})):
+        """Production backwrite workbook: one PRD row per charge. Reads Etere, writes nothing."""
+        from datetime import date as _date
+
+        from backwrite.production import (
+            ProductionCharge,
+            build_workbook,
+            load_contract,
+            output_name,
+        )
+
+        def _run():
+            contract = load_contract(str(body.get("contract_id") or ""))
+            charges = []
+            for i, c in enumerate(body.get("charges") or [], 1):
+                try:
+                    bd = _date.fromisoformat(str(c.get("bill_date") or ""))
+                    amount = float(str(c.get("amount") or "").replace(",", "").replace("$", ""))
+                except ValueError:
+                    raise ValueError(f"Charge {i}: the date or the amount cannot be read.")
+                charges.append(
+                    ProductionCharge(
+                        bill_date=bd,
+                        description=str(c.get("description") or ""),
+                        amount=amount,
+                        market=str(c.get("market") or "").strip().upper(),
+                    )
+                )
+            reconcile: dict = {}
+            xlsx = build_workbook(
+                contract,
+                charges,
+                amounts_are_gross=body.get("amounts_are_gross"),
+                contact=body.get("contact") if isinstance(body.get("contact"), dict) else None,
+                validation_out=reconcile,
+            )
+            name = output_name(contract["code"], min(c.bill_date for c in charges))
+            return xlsx, name, reconcile
+
+        try:
+            xlsx, name, reconcile = await asyncio.get_event_loop().run_in_executor(None, _run)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        headers = {"Content-Disposition": f'attachment; filename="{name}"'}
+        if reconcile:
+            headers["X-Backwrite-Reconcile"] = json.dumps(reconcile)
+        return StreamingResponse(
+            io.BytesIO(xlsx),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers,
+        )
 
     @router.post("/preview-from-db")
     async def backwrite_preview_from_db(contract_id: str = Form(...)):

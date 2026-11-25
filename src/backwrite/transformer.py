@@ -1383,8 +1383,15 @@ def generate_excel(
     raw_csv: bytes = b"",
     io_detail: dict = None,
     validation_out: Optional[dict] = None,
+    production: bool = False,
 ) -> bytes:
     """Generate backwrite Excel from template and return raw bytes.
+
+    ``production=True`` writes a PRODUCTION backwrite (Lee 2026-11-25): each
+    ``SpotRow`` is one charge, not an airing (see ``backwrite.production``). The
+    bill code gets `` PRODUCTION``, every Run Sheet row is a ``PRD`` /
+    ``BILLING LINE`` row with no times and no length, and each charge is one
+    1 x amount line on the Sales Confirmation.
 
     If ``validation_out`` (a dict) is provided, it is populated with a totals
     reconciliation: gross & net computed three ways (run sheet / SC lines /
@@ -1404,6 +1411,8 @@ def generate_excel(
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
+    if production:
+        bill_code = f"{bill_code} PRODUCTION"
 
     # Build a gross-up lookup so SC lines and totals match the run sheet.
     # gross_up_rates maps {csv_gross_rate_str: net_rate_str}; full gross = net / (1 - fee).
@@ -1477,6 +1486,28 @@ def generate_excel(
                 }
             )
 
+    if production:
+        # One row per charge, in the order given: no clock times, no length, the
+        # charge description as the media, and the PRD type billing keys on.
+        _zero = timedelta(0)
+        for rr, s in zip(run_rows, spots):
+            rr.update(
+                time_in=_zero,
+                time_out=_zero,
+                length=_zero,
+                media=s.row_description,
+                program="BILLING LINE",
+                # A Calendar row carries its own date as the month, as the airtime
+                # rows do; a Broadcast row keeps the broadcast-month date.
+                month=(
+                    datetime(s.air_date.year, s.air_date.month, s.air_date.day)
+                    if billing_type == "Calendar"
+                    else rr["month"]
+                ),
+                lang=user_inputs.get("lang", ""),
+                type="PRD",
+            )
+
     # Apply gross-up to all run rows regardless of which path built them
     if _gross_up_map:
         for r in run_rows:
@@ -1493,7 +1524,23 @@ def generate_excel(
         rr.setdefault("estimate_run", estimate_run)
 
     # ── Sales Confirmation lines ──────────────────────────────────────────────
-    if io_detail and io_detail.get("lines"):
+    if production:
+        sc_lines = [
+            {
+                "line_number": i + 1,
+                "date_range_start": s.air_date.strftime("%m/%d/%Y"),
+                "date_range_end": s.air_date.strftime("%m/%d/%Y"),
+                "spot_count": 1,
+                "per": "Order",
+                "weeks": 1,
+                "line_description": s.row_description,
+                "type": "PRD",
+                "length": "",
+                "gross_rate": s.gross_rate,
+            }
+            for i, s in enumerate(spots)
+        ]
+    elif io_detail and io_detail.get("lines"):
         sc_lines = _sc_lines_from_io(io_detail)
         for _ln in sc_lines:
             _ln["gross_rate"] = _grossed_up(_ln["gross_rate"])
