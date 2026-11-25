@@ -168,6 +168,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_vida_inputs",
         "The Vida Agency / Puget Sound Energy",
     ),
+    OrderType.MEDIAPLAN: (
+        "browser_automation.mediaplan_automation",
+        "gather_mediaplan_inputs",
+        "Crossings TV Media Plan",
+    ),
     OrderType.SNOQUALMIE: (
         "browser_automation.snoqualmie_automation",
         "gather_snoqualmie_inputs",

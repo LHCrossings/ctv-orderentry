@@ -159,6 +159,7 @@ class OrderProcessingService:
         OrderType.SANMATEO: "_process_sanmateo_order",
         OrderType.VIDA: "_process_vida_order",
         OrderType.SNOQUALMIE: "_process_snoqualmie_order",
+        OrderType.MEDIAPLAN: "_process_mediaplan_order",
         OrderType.VIEWPOINT: "_process_viewpoint_order",
         OrderType.HARRAHS: "_process_harrahs_order",
         OrderType.CAFOB: "_process_cafob_order",
@@ -217,6 +218,7 @@ class OrderProcessingService:
         OrderType.SANMATEO,
         OrderType.VIDA,
         OrderType.SNOQUALMIE,
+        OrderType.MEDIAPLAN,
         OrderType.VIEWPOINT,
         OrderType.HARRAHS,
         OrderType.CAFOB,
@@ -3574,6 +3576,44 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.VIDA,
+                error_message=error_detail,
+            )
+
+    def _process_mediaplan_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Crossings TV Media Plan (Marquice's house template) — one contract."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.mediaplan_automation import run_mediaplan_order
+            from browser_automation.parsers.mediaplan_parser import parse_mediaplan
+
+            parsed = parse_mediaplan(str(order.pdf_path))
+            results = run_mediaplan_order(parsed, inp)  # list of (code, success)
+
+            contracts = [
+                Contract(contract_number=code, order_type=OrderType.MEDIAPLAN)
+                for code, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.MEDIAPLAN,
+                    error_message="Media Plan processing failed — check output above",
+                )
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.MEDIAPLAN
+            )
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"Media Plan processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Media Plan processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.MEDIAPLAN,
                 error_message=error_detail,
             )
 

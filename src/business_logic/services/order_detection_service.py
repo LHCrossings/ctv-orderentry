@@ -241,6 +241,11 @@ class OrderDetectionService:
         if self._is_sierra_donor(first_page_text):
             return OrderType.SIERRADONOR
 
+        # Crossings TV Media Plan for any OTHER advertiser (same template as Sierra,
+        # which is keyed on its client above and must stay first)
+        if self._is_mediaplan(first_page_text):
+            return OrderType.MEDIAPLAN
+
         # Sacramento County Water Agency (Crossings TV house template)
         if self._is_scwa(first_page_text):
             return OrderType.SCWA
@@ -370,6 +375,12 @@ class OrderDetectionService:
         from browser_automation.parsers.harrahs_parser import is_harrahs_text
 
         return is_harrahs_text(text)
+
+    def _is_mediaplan(self, text: str) -> bool:
+        """House 'Crossings TV Media Plan' template, any advertiser (Sierra is matched earlier)."""
+        from browser_automation.parsers.mediaplan_parser import is_mediaplan_text
+
+        return is_mediaplan_text(text)
 
     def _is_snoqualmie(self, text: str) -> bool:
         """Snoqualmie Casino proposal: the client's name on a 'Crossings TV Media Proposal' page."""
